@@ -11,6 +11,12 @@ function formatTime(sec: number) {
   if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms}`;
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms}`;
 }
+function getAnimatedOpacity(currentTime: number, startTime: number, endTime: number, animationIn?: "none" | "fade", animationOut?: "none" | "fade", duration = 0.4) {
+  let opacity = 1;
+  if (animationIn === "fade") opacity = Math.min(opacity, Math.max(0, (currentTime - startTime) / duration));
+  if (animationOut === "fade") opacity = Math.min(opacity, Math.max(0, (endTime - currentTime) / duration));
+  return opacity;
+}
 
 export default function ProPreviewPanel() {
   const videoClips = useEditorStore((s) => s.videoClips);
@@ -145,7 +151,14 @@ export default function ProPreviewPanel() {
             <div
               key={c.id}
               className="overlay-caption"
-              style={{ color: c.color, fontSize: c.fontSize, left: `${c.x}%`, top: `${c.y}%` }}
+              style={{
+                color: c.color, fontSize: c.fontSize, left: `${c.x}%`, top: `${c.y}%`,
+                fontFamily: c.fontFamily,
+                background: c.backgroundColor,
+                padding: c.backgroundColor === "transparent" ? "0" : "2px 8px",
+                borderRadius: c.backgroundColor === "transparent" ? 0 : 6,
+                opacity: getAnimatedOpacity(currentTime, c.startTime, c.endTime, c.animationIn, c.animationOut, c.animationDuration),
+              }}
               onMouseDown={(e) => {
                 const el = e.currentTarget.parentElement;
                 if (!el) return;
@@ -177,7 +190,7 @@ export default function ProPreviewPanel() {
             <div
               key={s.id}
               className="overlay-sticker"
-              style={{ fontSize: s.size, left: `${s.x}%`, top: `${s.y}%` }}
+              style={{ fontSize: s.size, left: `${s.x}%`, top: `${s.y}%`, opacity: getAnimatedOpacity(currentTime, s.startTime, s.endTime, s.animationIn, s.animationOut, s.animationDuration) }}
               onMouseDown={(e) => {
                 const el = e.currentTarget.parentElement;
                 if (!el) return;
@@ -205,7 +218,7 @@ export default function ProPreviewPanel() {
           .filter((img) => currentTime >= img.startTime && currentTime <= img.endTime)
           .map((img) => (
             <img key={img.id} src={img.url} alt={img.name} className="overlay-image"
-              style={{ width: `${img.width}%`, left: `${img.x}%`, top: `${img.y}%` }}
+              style={{ width: `${img.width}%`, left: `${img.x}%`, top: `${img.y}%`, opacity: getAnimatedOpacity(currentTime, img.startTime, img.endTime, img.animationIn, img.animationOut, img.animationDuration) }}
               onMouseDown={(e) => {
                 const stage = e.currentTarget.parentElement;
                 if (!stage) return;
