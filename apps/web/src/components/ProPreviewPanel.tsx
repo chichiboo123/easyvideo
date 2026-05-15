@@ -17,6 +17,10 @@ export default function ProPreviewPanel() {
   const audioClip = useEditorStore((s) => s.audioClip);
   const captions = useEditorStore((s) => s.captions);
   const stickers = useEditorStore((s) => s.stickers);
+  const images = useEditorStore((s) => s.images);
+  const selectedCaptionId = useEditorStore((s) => s.selectedCaptionId);
+  const selectedStickerId = useEditorStore((s) => s.selectedStickerId);
+  const selectedImageId = useEditorStore((s) => s.selectedImageId);
   const isPlaying = useEditorStore((s) => s.isPlaying);
   const currentTime = useEditorStore((s) => s.currentTime);
   const activeClipIndex = useEditorStore((s) => s.activeClipIndex);
@@ -25,6 +29,12 @@ export default function ProPreviewPanel() {
   const setPlaying = useEditorStore((s) => s.setPlaying);
   const setActiveClipIndex = useEditorStore((s) => s.setActiveClipIndex);
   const setSeekRequest = useEditorStore((s) => s.setSeekRequest);
+  const selectCaption = useEditorStore((s) => s.selectCaption);
+  const selectSticker = useEditorStore((s) => s.selectSticker);
+  const selectImage = useEditorStore((s) => s.selectImage);
+  const updateCaption = useEditorStore((s) => s.updateCaption);
+  const updateSticker = useEditorStore((s) => s.updateSticker);
+  const updateImage = useEditorStore((s) => s.updateImage);
   const totalDuration = useEditorStore((s) => s.totalDuration);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -136,6 +146,25 @@ export default function ProPreviewPanel() {
               key={c.id}
               className="overlay-caption"
               style={{ color: c.color, fontSize: c.fontSize, left: `${c.x}%`, top: `${c.y}%` }}
+              onMouseDown={(e) => {
+                const el = e.currentTarget.parentElement;
+                if (!el) return;
+                const rect = el.getBoundingClientRect();
+                const onMove = (ev: MouseEvent) => {
+                  updateCaption(c.id, {
+                    x: Math.max(0, Math.min(100, ((ev.clientX - rect.left) / rect.width) * 100)),
+                    y: Math.max(0, Math.min(100, ((ev.clientY - rect.top) / rect.height) * 100)),
+                  });
+                };
+                const onUp = () => {
+                  window.removeEventListener("mousemove", onMove);
+                  window.removeEventListener("mouseup", onUp);
+                };
+                selectCaption(c.id);
+                window.addEventListener("mousemove", onMove);
+                window.addEventListener("mouseup", onUp);
+              }}
+              data-selected={selectedCaptionId === c.id}
             >
               {c.text}
             </div>
@@ -149,9 +178,54 @@ export default function ProPreviewPanel() {
               key={s.id}
               className="overlay-sticker"
               style={{ fontSize: s.size, left: `${s.x}%`, top: `${s.y}%` }}
+              onMouseDown={(e) => {
+                const el = e.currentTarget.parentElement;
+                if (!el) return;
+                const rect = el.getBoundingClientRect();
+                const onMove = (ev: MouseEvent) => {
+                  updateSticker(s.id, {
+                    x: Math.max(0, Math.min(100, ((ev.clientX - rect.left) / rect.width) * 100)),
+                    y: Math.max(0, Math.min(100, ((ev.clientY - rect.top) / rect.height) * 100)),
+                  });
+                };
+                const onUp = () => {
+                  window.removeEventListener("mousemove", onMove);
+                  window.removeEventListener("mouseup", onUp);
+                };
+                selectSticker(s.id);
+                window.addEventListener("mousemove", onMove);
+                window.addEventListener("mouseup", onUp);
+              }}
+              data-selected={selectedStickerId === s.id}
             >
               {s.emoji}
             </div>
+          ))}
+        {images
+          .filter((img) => currentTime >= img.startTime && currentTime <= img.endTime)
+          .map((img) => (
+            <img key={img.id} src={img.url} alt={img.name} className="overlay-image"
+              style={{ width: `${img.width}%`, left: `${img.x}%`, top: `${img.y}%` }}
+              onMouseDown={(e) => {
+                const stage = e.currentTarget.parentElement;
+                if (!stage) return;
+                const rect = stage.getBoundingClientRect();
+                const onMove = (ev: MouseEvent) => {
+                  updateImage(img.id, {
+                    x: Math.max(0, Math.min(100, ((ev.clientX - rect.left) / rect.width) * 100)),
+                    y: Math.max(0, Math.min(100, ((ev.clientY - rect.top) / rect.height) * 100)),
+                  });
+                };
+                const onUp = () => {
+                  window.removeEventListener("mousemove", onMove);
+                  window.removeEventListener("mouseup", onUp);
+                };
+                selectImage(img.id);
+                window.addEventListener("mousemove", onMove);
+                window.addEventListener("mouseup", onUp);
+              }}
+              data-selected={selectedImageId === img.id}
+            />
           ))}
       </div>
 

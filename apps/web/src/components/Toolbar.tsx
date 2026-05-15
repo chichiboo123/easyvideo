@@ -16,15 +16,18 @@ export default function Toolbar({ onExport }: ToolbarProps) {
   const removeSticker = useEditorStore((s) => s.removeSticker);
   const selectedCaptionId = useEditorStore((s) => s.selectedCaptionId);
   const selectedStickerId = useEditorStore((s) => s.selectedStickerId);
+  const selectedImageId = useEditorStore((s) => s.selectedImageId);
+  const removeImage = useEditorStore((s) => s.removeImage);
   const videoClips = useEditorStore((s) => s.videoClips);
 
-  const hasSelection = !!(selectedClipId || selectedCaptionId || selectedStickerId);
+  const hasSelection = !!(selectedClipId || selectedCaptionId || selectedStickerId || selectedImageId);
   const hasClips = videoClips.length > 0;
 
   function handleDelete() {
     if (selectedClipId) removeVideoClip(selectedClipId);
     if (selectedCaptionId) removeCaption(selectedCaptionId);
     if (selectedStickerId) removeSticker(selectedStickerId);
+    if (selectedImageId) removeImage(selectedImageId);
   }
 
   function handleSplit() {

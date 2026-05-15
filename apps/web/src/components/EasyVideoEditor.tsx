@@ -21,6 +21,8 @@ export default function EasyVideoEditor() {
   const removeVideoClip = useEditorStore((s) => s.removeVideoClip);
   const removeCaption = useEditorStore((s) => s.removeCaption);
   const removeSticker = useEditorStore((s) => s.removeSticker);
+  const selectedImageId = useEditorStore((s) => s.selectedImageId);
+  const removeImage = useEditorStore((s) => s.removeImage);
   const setTimelineZoom = useEditorStore((s) => s.setTimelineZoom);
   const timelineZoom = useEditorStore((s) => s.timelineZoom);
 
@@ -45,6 +47,7 @@ export default function EasyVideoEditor() {
           if (selectedClipId) removeVideoClip(selectedClipId);
           if (selectedCaptionId) removeCaption(selectedCaptionId);
           if (selectedStickerId) removeSticker(selectedStickerId);
+          if (selectedImageId) removeImage(selectedImageId);
           break;
         case "+":
         case "=":
@@ -63,6 +66,7 @@ export default function EasyVideoEditor() {
     selectedClipId, removeVideoClip,
     selectedCaptionId, removeCaption,
     selectedStickerId, removeSticker,
+    selectedImageId, removeImage,
     timelineZoom, setTimelineZoom,
   ]);
 

@@ -8,6 +8,7 @@ import type {
   EditorStep,
   Sticker,
   VideoClip,
+  ImageOverlay,
 } from "@/types";
 
 interface EditorState {
@@ -16,11 +17,13 @@ interface EditorState {
   audioClip: AudioClip | null;
   captions: Caption[];
   stickers: Sticker[];
+  images: ImageOverlay[];
 
   // selection
   selectedClipId: string | null;
   selectedCaptionId: string | null;
   selectedStickerId: string | null;
+  selectedImageId: string | null;
 
   // playback
   currentTime: number;
@@ -54,10 +57,16 @@ interface EditorState {
   updateSticker: (id: string, patch: Partial<Sticker>) => void;
   removeSticker: (id: string) => void;
 
+  // images
+  addImage: (name: string, url: string) => void;
+  updateImage: (id: string, patch: Partial<ImageOverlay>) => void;
+  removeImage: (id: string) => void;
+
   // playback controls
   selectClip: (id: string | null) => void;
   selectCaption: (id: string | null) => void;
   selectSticker: (id: string | null) => void;
+  selectImage: (id: string | null) => void;
   setCurrentTime: (t: number) => void;
   setPlaying: (p: boolean) => void;
   setActiveClipIndex: (i: number) => void;
@@ -83,10 +92,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   audioClip: null,
   captions: [],
   stickers: [],
+  images: [],
 
   selectedClipId: null,
   selectedCaptionId: null,
   selectedStickerId: null,
+  selectedImageId: null,
 
   currentTime: 0,
   isPlaying: false,
@@ -203,14 +214,44 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       selectedStickerId: state.selectedStickerId === id ? null : state.selectedStickerId,
     })),
 
+  addImage: (name, url) =>
+    set((state) => ({
+      images: [
+        ...state.images,
+        {
+          id: uid(),
+          name,
+          url,
+          x: 50,
+          y: 50,
+          width: 25,
+          startTime: get().currentTime,
+          endTime: Math.min(get().currentTime + 3, get().totalDuration() || 5),
+        },
+      ],
+    })),
+
+  updateImage: (id, patch) =>
+    set((state) => ({
+      images: state.images.map((img) => (img.id === id ? { ...img, ...patch } : img)),
+    })),
+
+  removeImage: (id) =>
+    set((state) => ({
+      images: state.images.filter((img) => img.id !== id),
+      selectedImageId: state.selectedImageId === id ? null : state.selectedImageId,
+    })),
+
   // ── selection / playback ──────────────────────────────────────────────────
 
   selectClip: (id) =>
-    set({ selectedClipId: id, selectedCaptionId: null, selectedStickerId: null }),
+    set({ selectedClipId: id, selectedCaptionId: null, selectedStickerId: null, selectedImageId: null }),
   selectCaption: (id) =>
-    set({ selectedCaptionId: id, selectedClipId: null, selectedStickerId: null }),
+    set({ selectedCaptionId: id, selectedClipId: null, selectedStickerId: null, selectedImageId: null }),
   selectSticker: (id) =>
-    set({ selectedStickerId: id, selectedClipId: null, selectedCaptionId: null }),
+    set({ selectedStickerId: id, selectedClipId: null, selectedCaptionId: null, selectedImageId: null }),
+  selectImage: (id) =>
+    set({ selectedImageId: id, selectedClipId: null, selectedCaptionId: null, selectedStickerId: null }),
 
   setCurrentTime: (t) => set({ currentTime: t }),
   setPlaying: (p) => set({ isPlaying: p }),

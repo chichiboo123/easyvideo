@@ -25,17 +25,22 @@ export default function ProTimeline() {
   const audioClip = useEditorStore((s) => s.audioClip);
   const captions = useEditorStore((s) => s.captions);
   const stickers = useEditorStore((s) => s.stickers);
+  const images = useEditorStore((s) => s.images);
   const currentTime = useEditorStore((s) => s.currentTime);
   const isPlaying = useEditorStore((s) => s.isPlaying);
   const selectedClipId = useEditorStore((s) => s.selectedClipId);
   const selectedCaptionId = useEditorStore((s) => s.selectedCaptionId);
   const selectedStickerId = useEditorStore((s) => s.selectedStickerId);
+  const selectedImageId = useEditorStore((s) => s.selectedImageId);
   const timelineZoom = useEditorStore((s) => s.timelineZoom);
   const totalDuration = useEditorStore((s) => s.totalDuration);
 
   const selectClip = useEditorStore((s) => s.selectClip);
   const selectCaption = useEditorStore((s) => s.selectCaption);
   const selectSticker = useEditorStore((s) => s.selectSticker);
+  const selectImage = useEditorStore((s) => s.selectImage);
+  const updateCaption = useEditorStore((s) => s.updateCaption);
+  const updateImage = useEditorStore((s) => s.updateImage);
   const splitClipAtPlayhead = useEditorStore((s) => s.splitClipAtPlayhead);
   const setTimelineZoom = useEditorStore((s) => s.setTimelineZoom);
   const setActiveClipIndex = useEditorStore((s) => s.setActiveClipIndex);
@@ -69,6 +74,11 @@ export default function ProTimeline() {
     // x relative to the CONTENT area (after track header)
     const x = e.clientX - rect.left - TRACK_HEADER_W + body.scrollLeft;
     if (x < 0) return;
+    const t = Math.max(0, Math.min(total, x / pxPerSec));
+    seekToGlobal(t);
+  }
+  function seekByClientX(clientX: number, rect: DOMRect, scrollLeft: number) {
+    const x = clientX - rect.left - TRACK_HEADER_W + scrollLeft;
     const t = Math.max(0, Math.min(total, x / pxPerSec));
     seekToGlobal(t);
   }
@@ -167,6 +177,19 @@ export default function ProTimeline() {
           <div
             className="playhead"
             style={{ left: playheadX }}
+            onMouseDown={(e) => {
+              const body = bodyRef.current;
+              if (!body) return;
+              const rect = body.getBoundingClientRect();
+              const onMove = (ev: MouseEvent) => seekByClientX(ev.clientX, rect, body.scrollLeft);
+              const onUp = () => {
+                window.removeEventListener("mousemove", onMove);
+                window.removeEventListener("mouseup", onUp);
+              };
+              onMove(e.nativeEvent);
+              window.addEventListener("mousemove", onMove);
+              window.addEventListener("mouseup", onUp);
+            }}
             aria-hidden="true"
           >
             <div className="playhead-handle" />
@@ -277,7 +300,70 @@ export default function ProTimeline() {
                       aria-pressed={selectedCaptionId === cap.id}
                       title={cap.text}
                     >
-                      <span className="clip-label">{cap.text}</span>
+                    <span className="clip-label">{cap.text}</span>
+                      <span className="clip-edge-handle left" onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const startX = e.clientX;
+                        const startTime = cap.startTime;
+                        const onMove = (ev: MouseEvent) => {
+                          const next = Math.max(0, Math.min(cap.endTime - 0.1, startTime + (ev.clientX - startX) / pxPerSec));
+                          updateCaption(cap.id, { startTime: next });
+                        };
+                        const onUp = () => {
+                          window.removeEventListener("mousemove", onMove);
+                          window.removeEventListener("mouseup", onUp);
+                        };
+                        window.addEventListener("mousemove", onMove);
+                        window.addEventListener("mouseup", onUp);
+                      }} />
+                      <span className="clip-edge-handle right" onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const startX = e.clientX;
+                        const endTime = cap.endTime;
+                        const onMove = (ev: MouseEvent) => {
+                          const next = Math.max(cap.startTime + 0.1, endTime + (ev.clientX - startX) / pxPerSec);
+                          updateCaption(cap.id, { endTime: next });
+                        };
+                        const onUp = () => {
+                          window.removeEventListener("mousemove", onMove);
+                          window.removeEventListener("mouseup", onUp);
+                        };
+                        window.addEventListener("mousemove", onMove);
+                        window.addEventListener("mouseup", onUp);
+                      }} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {images.length > 0 && (
+            <div className="track-row" onClick={handleTrackClick} aria-label="이미지 트랙">
+              <div className="track-header">이미지</div>
+              <div className="track-body">
+                {images.map((img) => {
+                  const left = img.startTime * pxPerSec;
+                  const width = Math.max((img.endTime - img.startTime) * pxPerSec - 2, 30);
+                  return (
+                    <div key={img.id} className={`clip-block clip-video ${selectedImageId === img.id ? "selected" : ""}`} style={{ left, width }}
+                      onClick={(e) => { e.stopPropagation(); selectImage(img.id); }}>
+                      <span className="clip-label">🖼 {img.name}</span>
+                      <span className="clip-edge-handle left" onMouseDown={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        const startX = e.clientX; const start = img.startTime;
+                        const onMove = (ev: MouseEvent) => updateImage(img.id, { startTime: Math.max(0, Math.min(img.endTime - 0.1, start + (ev.clientX - startX) / pxPerSec)) });
+                        const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                        window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+                      }} />
+                      <span className="clip-edge-handle right" onMouseDown={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        const startX = e.clientX; const end = img.endTime;
+                        const onMove = (ev: MouseEvent) => updateImage(img.id, { endTime: Math.max(img.startTime + 0.1, end + (ev.clientX - startX) / pxPerSec) });
+                        const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                        window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+                      }} />
                     </div>
                   );
                 })}
