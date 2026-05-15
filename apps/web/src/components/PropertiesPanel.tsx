@@ -96,24 +96,6 @@ export default function PropertiesPanel() {
           </div>
 
           <div className="props-section">
-            <div className="props-section-title">구간</div>
-            <div className="prop-row">
-              <span className="prop-label">시작</span>
-              <input type="number" className="prop-input" style={{ width: 70 }} min={0} step={0.1}
-                value={selectedSticker.startTime.toFixed(1)}
-                onChange={(e) => updateSticker(selectedSticker.id, { startTime: Number(e.target.value) })}
-              />
-            </div>
-            <div className="prop-row">
-              <span className="prop-label">끝</span>
-              <input type="number" className="prop-input" style={{ width: 70 }} min={0} step={0.1}
-                value={selectedSticker.endTime.toFixed(1)}
-                onChange={(e) => updateSticker(selectedSticker.id, { endTime: Number(e.target.value) })}
-              />
-            </div>
-          </div>
-
-          <div className="props-section">
             <button
               type="button"
               className="btn-danger"
