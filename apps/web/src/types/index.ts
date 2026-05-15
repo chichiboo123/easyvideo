@@ -32,6 +32,11 @@ export interface Caption {
   y: number;
   startTime: number;
   endTime: number;
+  fontFamily: string;
+  backgroundColor: string;
+  animationIn: "none" | "fade";
+  animationOut: "none" | "fade";
+  animationDuration: number;
 }
 
 export interface ImageOverlay {
@@ -43,6 +48,9 @@ export interface ImageOverlay {
   width: number;
   startTime: number;
   endTime: number;
+  animationIn: "none" | "fade";
+  animationOut: "none" | "fade";
+  animationDuration: number;
 }
 
 export interface Sticker {
@@ -53,6 +61,9 @@ export interface Sticker {
   size: number;
   startTime: number;
   endTime: number;
+  animationIn: "none" | "fade";
+  animationOut: "none" | "fade";
+  animationDuration: number;
 }
 
 export type EditorStep = 1 | 2 | 3;
