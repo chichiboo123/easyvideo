@@ -799,7 +799,7 @@ button, select, input, textarea {
   width: 2px;
   background: var(--playhead);
   z-index: 25;
-  pointer-events: none;
+  pointer-events: auto;
   box-shadow: 0 0 8px rgba(254,44,85,0.5);
 }
 .playhead-handle {
