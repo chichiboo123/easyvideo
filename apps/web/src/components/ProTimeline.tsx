@@ -195,7 +195,7 @@ export default function ProTimeline() {
             <div className="playhead-handle" />
           </div>
 
-          {/* ── Video track ── */}
+          {/* ── Video track V1 ── */}
           <div
             className="track-row"
             onClick={handleTrackClick}
@@ -206,10 +206,11 @@ export default function ProTimeline() {
                 <rect x="2" y="3" width="20" height="14" rx="2"/>
                 <path d="M10 8l6 4-6 4V8z"/>
               </svg>
-              영상
+              V1
             </div>
             <div className="track-body">
-              {videoClips.map((clip, idx) => {
+              {videoClips.filter((_, idx) => idx % 2 === 0).map((clip) => {
+                const idx = videoClips.findIndex((x) => x.id === clip.id);
                 const left = clipOffsets[idx] * pxPerSec;
                 const width = Math.max(clip.duration * pxPerSec - 2, 20);
                 return (
@@ -243,7 +244,20 @@ export default function ProTimeline() {
             </div>
           </div>
 
-          {/* ── Audio track ── */}
+          {/* ── Video track V2 ── */}
+          <div className="track-row" onClick={handleTrackClick} aria-label="비디오 트랙 V2">
+            <div className="track-header">V2</div>
+            <div className="track-body">
+              {videoClips.filter((_, idx) => idx % 2 === 1).map((clip) => {
+                const idx = videoClips.findIndex((x) => x.id === clip.id);
+                const left = clipOffsets[idx] * pxPerSec;
+                const width = Math.max(clip.duration * pxPerSec - 2, 20);
+                return <div key={clip.id} className={`clip-block clip-video ${selectedClipId === clip.id ? "selected" : ""}`} style={{ left, width }} onClick={(e) => { e.stopPropagation(); selectClip(clip.id); }}><span className="clip-label">{clip.name}</span></div>;
+              })}
+            </div>
+          </div>
+
+          {/* ── Audio track M1 ── */}
           <div
             className="track-row"
             onClick={handleTrackClick}
@@ -253,7 +267,7 @@ export default function ProTimeline() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M12 3v10.55a4 4 0 10.97 2.6L13 6l6 1V4l-7-1z"/>
               </svg>
-              음악
+              M1
             </div>
             <div className="track-body">
               {audioClip && (
@@ -267,6 +281,12 @@ export default function ProTimeline() {
                   <span className="clip-label">🎵 {audioClip.name}</span>
                 </div>
               )}
+            </div>
+          </div>
+          <div className="track-row" onClick={handleTrackClick} aria-label="오디오 트랙 M2">
+            <div className="track-header">M2</div>
+            <div className="track-body">
+              <div className="clip-block" style={{ left: 0, width: 120, opacity: 0.4 }}><span className="clip-label">효과음/추가음악 슬롯</span></div>
             </div>
           </div>
 
