@@ -26,10 +26,12 @@ export default function PropertiesPanel() {
   const captions = useEditorStore((s) => s.captions);
   const stickers = useEditorStore((s) => s.stickers);
   const audioClip = useEditorStore((s) => s.audioClip);
+  const images = useEditorStore((s) => s.images);
 
   const selectedClipId = useEditorStore((s) => s.selectedClipId);
   const selectedCaptionId = useEditorStore((s) => s.selectedCaptionId);
   const selectedStickerId = useEditorStore((s) => s.selectedStickerId);
+  const selectedImageId = useEditorStore((s) => s.selectedImageId);
 
   const removeVideoClip = useEditorStore((s) => s.removeVideoClip);
   const updateCaption = useEditorStore((s) => s.updateCaption);
@@ -37,12 +39,15 @@ export default function PropertiesPanel() {
   const updateSticker = useEditorStore((s) => s.updateSticker);
   const removeSticker = useEditorStore((s) => s.removeSticker);
   const setAudioClip = useEditorStore((s) => s.setAudioClip);
+  const updateImage = useEditorStore((s) => s.updateImage);
+  const removeImage = useEditorStore((s) => s.removeImage);
   const clipOffsets = useEditorStore((s) => s.clipOffsets);
 
   const offsets = clipOffsets();
   const selectedClip = videoClips.find((c) => c.id === selectedClipId);
   const selectedCaption = captions.find((c) => c.id === selectedCaptionId);
   const selectedSticker = stickers.find((s) => s.id === selectedStickerId);
+  const selectedImage = images.find((s) => s.id === selectedImageId);
 
   // ── Video clip properties ─────────────────────────────────────────────────
   if (selectedClip) {
@@ -91,6 +96,24 @@ export default function PropertiesPanel() {
           </div>
 
           <div className="props-section">
+            <div className="props-section-title">구간</div>
+            <div className="prop-row">
+              <span className="prop-label">시작</span>
+              <input type="number" className="prop-input" style={{ width: 70 }} min={0} step={0.1}
+                value={selectedSticker.startTime.toFixed(1)}
+                onChange={(e) => updateSticker(selectedSticker.id, { startTime: Number(e.target.value) })}
+              />
+            </div>
+            <div className="prop-row">
+              <span className="prop-label">끝</span>
+              <input type="number" className="prop-input" style={{ width: 70 }} min={0} step={0.1}
+                value={selectedSticker.endTime.toFixed(1)}
+                onChange={(e) => updateSticker(selectedSticker.id, { endTime: Number(e.target.value) })}
+              />
+            </div>
+          </div>
+
+          <div className="props-section">
             <button
               type="button"
               className="btn-danger"
@@ -100,6 +123,41 @@ export default function PropertiesPanel() {
               클립 삭제
             </button>
           </div>
+        </div>
+      </aside>
+    );
+  }
+  if (selectedImage) {
+    return (
+      <aside className="props-panel" aria-label="이미지 속성">
+        <div className="props-header">이미지</div>
+        <div className="props-body">
+          <div className="props-section">
+            <div className="props-section-title">이름</div>
+            <div className="prop-value">{selectedImage.name}</div>
+          </div>
+          <div className="props-section">
+            <div className="props-section-title">크기</div>
+            <input type="range" className="prop-slider" min={5} max={100} value={selectedImage.width}
+              onChange={(e) => updateImage(selectedImage.id, { width: Number(e.target.value) })} />
+          </div>
+          <div className="props-section">
+            <div className="props-section-title">위치 X / Y</div>
+            <input type="range" className="prop-slider" min={0} max={100} value={selectedImage.x}
+              onChange={(e) => updateImage(selectedImage.id, { x: Number(e.target.value) })} />
+            <input type="range" className="prop-slider" min={0} max={100} value={selectedImage.y}
+              onChange={(e) => updateImage(selectedImage.id, { y: Number(e.target.value) })} />
+          </div>
+          <div className="props-section">
+            <div className="props-section-title">구간</div>
+            <div className="prop-row"><span className="prop-label">시작</span>
+              <input type="number" className="prop-input" style={{ width: 70 }} min={0} step={0.1} value={selectedImage.startTime.toFixed(1)}
+                onChange={(e) => updateImage(selectedImage.id, { startTime: Number(e.target.value) })} /></div>
+            <div className="prop-row"><span className="prop-label">끝</span>
+              <input type="number" className="prop-input" style={{ width: 70 }} min={0} step={0.1} value={selectedImage.endTime.toFixed(1)}
+                onChange={(e) => updateImage(selectedImage.id, { endTime: Number(e.target.value) })} /></div>
+          </div>
+          <button type="button" className="btn-danger" onClick={() => removeImage(selectedImage.id)}>이미지 삭제</button>
         </div>
       </aside>
     );
