@@ -34,6 +34,17 @@ export interface Caption {
   endTime: number;
 }
 
+export interface ImageOverlay {
+  id: string;
+  name: string;
+  url: string;
+  x: number;
+  y: number;
+  width: number;
+  startTime: number;
+  endTime: number;
+}
+
 export interface Sticker {
   id: string;
   emoji: string;

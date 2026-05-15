@@ -32,7 +32,7 @@ const STICKERS = [
   "⚽","🏀","🎮","🎵","🎨","📚","🚀","🌍",
 ];
 
-type Tab = "media" | "audio" | "text" | "sticker";
+type Tab = "media" | "audio" | "text" | "sticker" | "image";
 
 function formatDur(sec: number) {
   const m = Math.floor(sec / 60);
@@ -49,6 +49,7 @@ export default function MediaPanel() {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const videoClips = useEditorStore((s) => s.videoClips);
   const audioClip = useEditorStore((s) => s.audioClip);
@@ -56,6 +57,7 @@ export default function MediaPanel() {
   const setAudioClip = useEditorStore((s) => s.setAudioClip);
   const addCaption = useEditorStore((s) => s.addCaption);
   const addSticker = useEditorStore((s) => s.addSticker);
+  const addImage = useEditorStore((s) => s.addImage);
 
   // ── Video upload ──────────────────────────────────────────────────────────
 
@@ -108,6 +110,7 @@ export default function MediaPanel() {
     { id: "audio", label: "오디오" },
     { id: "text", label: "텍스트" },
     { id: "sticker", label: "스티커" },
+    { id: "image", label: "이미지" },
   ];
 
   return (
@@ -285,6 +288,37 @@ export default function MediaPanel() {
 
             <p style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center" }}>
               Ctrl+Enter로도 추가할 수 있어요
+            </p>
+          </div>
+        )}
+
+
+        {tab === "image" && (
+          <div>
+            <button
+              type="button"
+              className="btn-upload"
+              onClick={() => imageInputRef.current?.click()}
+              aria-label="이미지 파일 선택"
+              title="PNG/JPG 이미지를 오버레이로 추가합니다"
+            >
+              이미지 파일 열기
+            </button>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const url = URL.createObjectURL(file);
+                addImage(file.name.replace(/\.[^.]+$/, ""), url);
+              }}
+              aria-label="이미지 파일"
+            />
+            <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
+              추가 후 미리보기에서 드래그로 위치를 이동하고, 속성 패널에서 크기/시간을 조절하세요.
             </p>
           </div>
         )}
