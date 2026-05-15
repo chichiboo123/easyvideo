@@ -33,9 +33,7 @@ function openDB(): Promise<IDBDatabase> {
 
 async function getOPFSRoot(): Promise<FileSystemDirectoryHandle | null> {
   try {
-    // @ts-expect-error - OPFS is widely available in modern browsers but lacks types here.
     if (navigator.storage?.getDirectory) {
-      // @ts-expect-error - see above
       return await navigator.storage.getDirectory();
     }
   } catch {
@@ -59,7 +57,6 @@ export async function saveFile(file: File): Promise<{ id: string; url: string }>
   if (opfs) {
     try {
       const handle = await opfs.getFileHandle(`${id}-${file.name}`, { create: true });
-      // @ts-expect-error createWritable types vary across TS lib versions.
       const writable = await handle.createWritable();
       await writable.write(file);
       await writable.close();
