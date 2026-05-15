@@ -1,0 +1,47 @@
+export interface VideoClip {
+  id: string;
+  name: string;
+  url: string;
+  duration: number;
+  startTime: number;
+  fileId?: string;
+}
+
+export interface AudioClip {
+  id: string;
+  name: string;
+  url: string;
+  duration: number;
+  isPreset?: boolean;
+}
+
+export type CaptionColor =
+  | "#000000"
+  | "#FFFFFF"
+  | "#FF4D4D"
+  | "#3D8BFF"
+  | "#FFD93D"
+  | "#4CD964";
+
+export interface Caption {
+  id: string;
+  text: string;
+  color: CaptionColor;
+  fontSize: number;
+  x: number;
+  y: number;
+  startTime: number;
+  endTime: number;
+}
+
+export interface Sticker {
+  id: string;
+  emoji: string;
+  x: number;
+  y: number;
+  size: number;
+  startTime: number;
+  endTime: number;
+}
+
+export type EditorStep = 1 | 2 | 3;
