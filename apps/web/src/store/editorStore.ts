@@ -11,36 +11,67 @@ import type {
 } from "@/types";
 
 interface EditorState {
+  // clips
   videoClips: VideoClip[];
   audioClip: AudioClip | null;
   captions: Caption[];
   stickers: Sticker[];
+
+  // selection
   selectedClipId: string | null;
+  selectedCaptionId: string | null;
+  selectedStickerId: string | null;
+
+  // playback
   currentTime: number;
   isPlaying: boolean;
+  activeClipIndex: number;
+  seekRequest: number | null;
+
+  // timeline
+  timelineZoom: number;    // px per second
+  selectedTool: "select" | "split";
+
+  // ui state
   step: EditorStep;
 
+  // clip actions
   addVideoClip: (clip: VideoClip) => void;
   removeVideoClip: (id: string) => void;
   reorderVideoClips: (fromIndex: number, toIndex: number) => void;
-  splitClip: (id: string, splitAt: number) => void;
+  splitClipAtPlayhead: () => void;
 
+  // audio
   setAudioClip: (clip: AudioClip | null) => void;
 
+  // captions
   addCaption: (text: string, color: CaptionColor) => void;
   updateCaption: (id: string, patch: Partial<Caption>) => void;
   removeCaption: (id: string) => void;
 
+  // stickers
   addSticker: (emoji: string) => void;
   updateSticker: (id: string, patch: Partial<Sticker>) => void;
   removeSticker: (id: string) => void;
 
+  // playback controls
   selectClip: (id: string | null) => void;
+  selectCaption: (id: string | null) => void;
+  selectSticker: (id: string | null) => void;
   setCurrentTime: (t: number) => void;
   setPlaying: (p: boolean) => void;
+  setActiveClipIndex: (i: number) => void;
+  setSeekRequest: (t: number | null) => void;
+
+  // timeline
+  setTimelineZoom: (z: number) => void;
+  setSelectedTool: (t: "select" | "split") => void;
+
   setStep: (s: EditorStep) => void;
 
+  // computed
   totalDuration: () => number;
+  clipOffsets: () => number[];
 }
 
 function uid() {
@@ -52,15 +83,26 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   audioClip: null,
   captions: [],
   stickers: [],
+
   selectedClipId: null,
+  selectedCaptionId: null,
+  selectedStickerId: null,
+
   currentTime: 0,
   isPlaying: false,
+  activeClipIndex: 0,
+  seekRequest: null,
+
+  timelineZoom: 80,
+  selectedTool: "select",
+
   step: 1,
+
+  // ── clip actions ──────────────────────────────────────────────────────────
 
   addVideoClip: (clip) =>
     set((state) => ({
       videoClips: [...state.videoClips, clip],
-      step: state.step === 1 ? 2 : state.step,
     })),
 
   removeVideoClip: (id) =>
@@ -69,37 +111,40 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
     })),
 
-  reorderVideoClips: (fromIndex, toIndex) =>
+  reorderVideoClips: (from, to) =>
     set((state) => {
       const next = [...state.videoClips];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
       return { videoClips: next };
     }),
 
-  splitClip: (id, splitAt) =>
+  splitClipAtPlayhead: () => {
+    const { currentTime, videoClips, clipOffsets } = get();
+    const offsets = clipOffsets();
+    // find which clip the playhead is inside
+    const idx = offsets.findIndex((off, i) => {
+      const end = off + videoClips[i].duration;
+      return currentTime >= off && currentTime < end;
+    });
+    if (idx === -1) return;
+    const clip = videoClips[idx];
+    const localSplit = currentTime - offsets[idx];
+    if (localSplit <= 0.05 || localSplit >= clip.duration - 0.05) return;
+    const first: VideoClip = { ...clip, id: uid(), duration: localSplit };
+    const second: VideoClip = { ...clip, id: uid(), duration: clip.duration - localSplit };
     set((state) => {
-      const idx = state.videoClips.findIndex((c) => c.id === id);
-      if (idx === -1) return state;
-      const clip = state.videoClips[idx];
-      const local = splitAt - clip.startTime;
-      if (local <= 0.1 || local >= clip.duration - 0.1) return state;
-      const first: VideoClip = {
-        ...clip,
-        id: uid(),
-        duration: local,
-      };
-      const second: VideoClip = {
-        ...clip,
-        id: uid(),
-        duration: clip.duration - local,
-      };
       const next = [...state.videoClips];
       next.splice(idx, 1, first, second);
       return { videoClips: next };
-    }),
+    });
+  },
+
+  // ── audio ─────────────────────────────────────────────────────────────────
 
   setAudioClip: (clip) => set({ audioClip: clip }),
+
+  // ── captions ──────────────────────────────────────────────────────────────
 
   addCaption: (text, color) =>
     set((state) => ({
@@ -112,8 +157,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           fontSize: 36,
           x: 50,
           y: 80,
-          startTime: 0,
-          endTime: get().totalDuration() || 5,
+          startTime: get().currentTime,
+          endTime: Math.min(get().currentTime + 3, get().totalDuration() || 5),
         },
       ],
     })),
@@ -124,7 +169,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     })),
 
   removeCaption: (id) =>
-    set((state) => ({ captions: state.captions.filter((c) => c.id !== id) })),
+    set((state) => ({
+      captions: state.captions.filter((c) => c.id !== id),
+      selectedCaptionId: state.selectedCaptionId === id ? null : state.selectedCaptionId,
+    })),
+
+  // ── stickers ──────────────────────────────────────────────────────────────
 
   addSticker: (emoji) =>
     set((state) => ({
@@ -136,8 +186,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           x: 50,
           y: 50,
           size: 64,
-          startTime: 0,
-          endTime: get().totalDuration() || 5,
+          startTime: get().currentTime,
+          endTime: Math.min(get().currentTime + 3, get().totalDuration() || 5),
         },
       ],
     })),
@@ -148,15 +198,46 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     })),
 
   removeSticker: (id) =>
-    set((state) => ({ stickers: state.stickers.filter((s) => s.id !== id) })),
+    set((state) => ({
+      stickers: state.stickers.filter((s) => s.id !== id),
+      selectedStickerId: state.selectedStickerId === id ? null : state.selectedStickerId,
+    })),
 
-  selectClip: (id) => set({ selectedClipId: id }),
+  // ── selection / playback ──────────────────────────────────────────────────
+
+  selectClip: (id) =>
+    set({ selectedClipId: id, selectedCaptionId: null, selectedStickerId: null }),
+  selectCaption: (id) =>
+    set({ selectedCaptionId: id, selectedClipId: null, selectedStickerId: null }),
+  selectSticker: (id) =>
+    set({ selectedStickerId: id, selectedClipId: null, selectedCaptionId: null }),
+
   setCurrentTime: (t) => set({ currentTime: t }),
   setPlaying: (p) => set({ isPlaying: p }),
+  setActiveClipIndex: (i) => set({ activeClipIndex: i }),
+  setSeekRequest: (t) => set({ seekRequest: t }),
+
+  setTimelineZoom: (z) =>
+    set({ timelineZoom: Math.min(200, Math.max(20, z)) }),
+
+  setSelectedTool: (t) => set({ selectedTool: t }),
   setStep: (s) => set({ step: s }),
+
+  // ── computed ──────────────────────────────────────────────────────────────
 
   totalDuration: () =>
     get().videoClips.reduce((sum, c) => sum + c.duration, 0),
+
+  clipOffsets: () => {
+    const clips = get().videoClips;
+    const offsets: number[] = [];
+    let t = 0;
+    for (const c of clips) {
+      offsets.push(t);
+      t += c.duration;
+    }
+    return offsets;
+  },
 }));
 
 export function generateId() {
