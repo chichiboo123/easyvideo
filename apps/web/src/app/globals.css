@@ -890,20 +890,43 @@ button, select, input, textarea {
 
 /* ── Responsive (≤767px): stack vertically ──────────────────────────── */
 @media (max-width: 767px) {
+  html, body {
+    overflow: auto;
+    touch-action: manipulation;
+  }
   .app {
-    grid-template-rows: var(--toolbar-h) auto 200px 180px;
+    height: auto;
+    min-height: 100vh;
+    grid-template-rows: auto minmax(220px, 42vh) minmax(220px, auto) minmax(220px, 34vh);
     grid-template-columns: 1fr;
     grid-template-areas:
       "toolbar"
       "preview"
       "media"
       "timeline";
+    overflow: visible;
+  }
+  .toolbar {
+    position: sticky;
+    top: 0;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px;
+    height: auto;
+    min-height: 56px;
+  }
+  .toolbar-btn, .btn-export, .panel-tab, .tl-btn {
+    min-height: 42px;
+    min-width: 42px;
+    font-size: 12px;
   }
   .props-panel { display: none; }
-  .media-panel { border-right: none; border-top: 1px solid var(--border); }
+  .media-panel { border-right: none; border-top: 1px solid var(--border); min-height: 220px; }
+  .timeline { min-height: 220px; }
+  .timeline-body { overflow: auto; -webkit-overflow-scrolling: touch; }
   :root {
     --panel-left: 100%;
     --panel-right: 0;
-    --timeline-h: 180px;
+    --timeline-h: 220px;
   }
 }

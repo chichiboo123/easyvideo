@@ -13,6 +13,10 @@ export default function ExportModal({ onClose }: ExportModalProps) {
   const audioClip = useEditorStore((s) => s.audioClip);
   const captions = useEditorStore((s) => s.captions);
   const stickers = useEditorStore((s) => s.stickers);
+  const isAudioMuted = useEditorStore((s) => s.isAudioMuted);
+  const transitionType = useEditorStore((s) => s.transitionType);
+  const transitionDuration = useEditorStore((s) => s.transitionDuration);
+  const videoEffect = useEditorStore((s) => s.videoEffect);
 
   const [phase, setPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [progress, setProgress] = useState(0);
@@ -30,6 +34,10 @@ export default function ExportModal({ onClose }: ExportModalProps) {
         audio: audioClip,
         captions,
         stickers,
+        isAudioMuted,
+        transitionType,
+        transitionDuration,
+        videoEffect,
         onProgress: (r) => {
           setProgress(Math.min(1, Math.max(0, r)));
           setLog(`처리 중: ${Math.round(r * 100)}%`);
