@@ -9,9 +9,13 @@ import type {
   Sticker,
   VideoClip,
   ImageOverlay,
+  TransitionType,
+  VideoEffectType,
 } from "@/types";
 
 interface EditorState {
+  historyPast: EditorSnapshot[];
+  historyFuture: EditorSnapshot[];
   // clips
   videoClips: VideoClip[];
   audioClip: AudioClip | null;
@@ -37,12 +41,18 @@ interface EditorState {
 
   // ui state
   step: EditorStep;
+  isVideoTrackLocked: boolean;
+  isAudioMuted: boolean;
+  transitionType: TransitionType;
+  transitionDuration: number;
+  videoEffect: VideoEffectType;
 
   // clip actions
   addVideoClip: (clip: VideoClip) => void;
   removeVideoClip: (id: string) => void;
   reorderVideoClips: (fromIndex: number, toIndex: number) => void;
   splitClipAtPlayhead: () => void;
+  updateVideoClipDuration: (id: string, duration: number) => void;
 
   // audio
   setAudioClip: (clip: AudioClip | null) => void;
@@ -77,10 +87,27 @@ interface EditorState {
   setSelectedTool: (t: "select" | "split") => void;
 
   setStep: (s: EditorStep) => void;
+  setVideoTrackLocked: (v: boolean) => void;
+  setAudioMuted: (v: boolean) => void;
+  setTransitionType: (t: TransitionType) => void;
+  setTransitionDuration: (d: number) => void;
+  setVideoEffect: (e: VideoEffectType) => void;
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
 
   // computed
   totalDuration: () => number;
   clipOffsets: () => number[];
+}
+
+interface EditorSnapshot {
+  videoClips: VideoClip[];
+  audioClip: AudioClip | null;
+  captions: Caption[];
+  stickers: Sticker[];
+  images: ImageOverlay[];
 }
 
 function uid() {
@@ -88,6 +115,8 @@ function uid() {
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
+  historyPast: [],
+  historyFuture: [],
   videoClips: [],
   audioClip: null,
   captions: [],
@@ -108,26 +137,45 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   selectedTool: "select",
 
   step: 1,
+  isVideoTrackLocked: false,
+  isAudioMuted: false,
+  transitionType: "none",
+  transitionDuration: 0.4,
+  videoEffect: "none",
 
   // ── clip actions ──────────────────────────────────────────────────────────
 
   addVideoClip: (clip) =>
-    set((state) => ({
-      videoClips: [...state.videoClips, clip],
-    })),
+    set((state) => {
+      const snap = snapshotOf(state);
+      return {
+        historyPast: pushHistory(state.historyPast, snap),
+        historyFuture: [],
+        videoClips: [...state.videoClips, clip],
+      };
+    }),
 
   removeVideoClip: (id) =>
-    set((state) => ({
-      videoClips: state.videoClips.filter((c) => c.id !== id),
-      selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
-    })),
+    set((state) => {
+      const snap = snapshotOf(state);
+      return {
+        historyPast: pushHistory(state.historyPast, snap),
+        historyFuture: [],
+        videoClips: state.videoClips.filter((c) => c.id !== id),
+        selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
+      };
+    }),
 
   reorderVideoClips: (from, to) =>
     set((state) => {
       const next = [...state.videoClips];
       const [moved] = next.splice(from, 1);
       next.splice(to, 0, moved);
-      return { videoClips: next };
+      return {
+        historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+        historyFuture: [],
+        videoClips: next
+      };
     }),
 
   splitClipAtPlayhead: () => {
@@ -147,18 +195,34 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => {
       const next = [...state.videoClips];
       next.splice(idx, 1, first, second);
-      return { videoClips: next };
+      return {
+        historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+        historyFuture: [],
+        videoClips: next
+      };
     });
   },
+  updateVideoClipDuration: (id, duration) =>
+    set((state) => ({
+      historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+      historyFuture: [],
+      videoClips: state.videoClips.map((c) => (c.id === id ? { ...c, duration } : c)),
+    })),
 
   // ── audio ─────────────────────────────────────────────────────────────────
 
-  setAudioClip: (clip) => set({ audioClip: clip }),
+  setAudioClip: (clip) => set((state) => ({
+    historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+    historyFuture: [],
+    audioClip: clip
+  })),
 
   // ── captions ──────────────────────────────────────────────────────────────
 
   addCaption: (text, color) =>
     set((state) => ({
+      historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+      historyFuture: [],
       captions: [
         ...state.captions,
         {
@@ -181,11 +245,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   updateCaption: (id, patch) =>
     set((state) => ({
+      historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+      historyFuture: [],
       captions: state.captions.map((c) => (c.id === id ? { ...c, ...patch } : c)),
     })),
 
   removeCaption: (id) =>
     set((state) => ({
+      historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+      historyFuture: [],
       captions: state.captions.filter((c) => c.id !== id),
       selectedCaptionId: state.selectedCaptionId === id ? null : state.selectedCaptionId,
     })),
@@ -194,6 +262,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   addSticker: (emoji) =>
     set((state) => ({
+      historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+      historyFuture: [],
       stickers: [
         ...state.stickers,
         {
@@ -213,17 +283,23 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   updateSticker: (id, patch) =>
     set((state) => ({
+      historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+      historyFuture: [],
       stickers: state.stickers.map((s) => (s.id === id ? { ...s, ...patch } : s)),
     })),
 
   removeSticker: (id) =>
     set((state) => ({
+      historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+      historyFuture: [],
       stickers: state.stickers.filter((s) => s.id !== id),
       selectedStickerId: state.selectedStickerId === id ? null : state.selectedStickerId,
     })),
 
   addImage: (name, url) =>
     set((state) => ({
+      historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+      historyFuture: [],
       images: [
         ...state.images,
         {
@@ -244,11 +320,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   updateImage: (id, patch) =>
     set((state) => ({
+      historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+      historyFuture: [],
       images: state.images.map((img) => (img.id === id ? { ...img, ...patch } : img)),
     })),
 
   removeImage: (id) =>
     set((state) => ({
+      historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+      historyFuture: [],
       images: state.images.filter((img) => img.id !== id),
       selectedImageId: state.selectedImageId === id ? null : state.selectedImageId,
     })),
@@ -274,6 +354,36 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setSelectedTool: (t) => set({ selectedTool: t }),
   setStep: (s) => set({ step: s }),
+  setVideoTrackLocked: (v) => set({ isVideoTrackLocked: v }),
+  setAudioMuted: (v) => set({ isAudioMuted: v }),
+  setTransitionType: (t) => set({ transitionType: t }),
+  setTransitionDuration: (d) => set({ transitionDuration: Math.max(0.2, Math.min(1.5, d)) }),
+  setVideoEffect: (e) => set({ videoEffect: e }),
+
+  undo: () =>
+    set((state) => {
+      if (state.historyPast.length === 0) return {};
+      const prev = state.historyPast[state.historyPast.length - 1];
+      const current = snapshotOf(state);
+      return {
+        historyPast: state.historyPast.slice(0, -1),
+        historyFuture: [current, ...state.historyFuture].slice(0, 100),
+        ...prev,
+      };
+    }),
+  redo: () =>
+    set((state) => {
+      if (state.historyFuture.length === 0) return {};
+      const next = state.historyFuture[0];
+      const current = snapshotOf(state);
+      return {
+        historyPast: pushHistory(state.historyPast, current),
+        historyFuture: state.historyFuture.slice(1),
+        ...next,
+      };
+    }),
+  canUndo: () => get().historyPast.length > 0,
+  canRedo: () => get().historyFuture.length > 0,
 
   // ── computed ──────────────────────────────────────────────────────────────
 
@@ -291,6 +401,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     return offsets;
   },
 }));
+
+function snapshotOf(state: Pick<EditorState, "videoClips" | "audioClip" | "captions" | "stickers" | "images">): EditorSnapshot {
+  return {
+    videoClips: structuredClone(state.videoClips),
+    audioClip: structuredClone(state.audioClip),
+    captions: structuredClone(state.captions),
+    stickers: structuredClone(state.stickers),
+    images: structuredClone(state.images),
+  };
+}
+
+function pushHistory(past: EditorSnapshot[], snapshot: EditorSnapshot) {
+  const next = [...past, snapshot];
+  if (next.length > 100) return next.slice(next.length - 100);
+  return next;
+}
 
 export function generateId() {
   return uid();

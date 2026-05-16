@@ -1,6 +1,7 @@
 "use client";
 
 import { useEditorStore } from "@/store/editorStore";
+import { downloadProjectFile } from "@/lib/project";
 
 interface ToolbarProps {
   onExport: () => void;
@@ -19,12 +20,20 @@ export default function Toolbar({ onExport }: ToolbarProps) {
   const selectedImageId = useEditorStore((s) => s.selectedImageId);
   const removeImage = useEditorStore((s) => s.removeImage);
   const videoClips = useEditorStore((s) => s.videoClips);
+  const isVideoTrackLocked = useEditorStore((s) => s.isVideoTrackLocked);
+  const isAudioMuted = useEditorStore((s) => s.isAudioMuted);
+  const setVideoTrackLocked = useEditorStore((s) => s.setVideoTrackLocked);
+  const setAudioMuted = useEditorStore((s) => s.setAudioMuted);
+  const undo = useEditorStore((s) => s.undo);
+  const redo = useEditorStore((s) => s.redo);
+  const canUndo = useEditorStore((s) => s.canUndo());
+  const canRedo = useEditorStore((s) => s.canRedo());
 
   const hasSelection = !!(selectedClipId || selectedCaptionId || selectedStickerId || selectedImageId);
   const hasClips = videoClips.length > 0;
 
   function handleDelete() {
-    if (selectedClipId) removeVideoClip(selectedClipId);
+    if (selectedClipId && !isVideoTrackLocked) removeVideoClip(selectedClipId);
     if (selectedCaptionId) removeCaption(selectedCaptionId);
     if (selectedStickerId) removeSticker(selectedStickerId);
     if (selectedImageId) removeImage(selectedImageId);
@@ -41,6 +50,27 @@ export default function Toolbar({ onExport }: ToolbarProps) {
         Easy<span>Video</span>
       </div>
 
+      <div className="toolbar-divider" aria-hidden="true" />
+      <button
+        type="button"
+        className="toolbar-btn"
+        onClick={undo}
+        disabled={!canUndo}
+        aria-label="되돌리기"
+        title="되돌리기 (Ctrl/⌘ + Z)"
+      >
+        ↶ 되돌리기
+      </button>
+      <button
+        type="button"
+        className="toolbar-btn"
+        onClick={redo}
+        disabled={!canRedo}
+        aria-label="다시 실행"
+        title="다시 실행 (Ctrl/⌘ + Shift + Z)"
+      >
+        ↷ 다시실행
+      </button>
       <div className="toolbar-divider" aria-hidden="true" />
 
       {/* Tool: Select */}
@@ -66,7 +96,7 @@ export default function Toolbar({ onExport }: ToolbarProps) {
           setSelectedTool("split");
           if (hasClips) handleSplit();
         }}
-        disabled={!hasClips}
+        disabled={!hasClips || isVideoTrackLocked}
         aria-label="클립 분할"
         title="재생 위치에서 클립 분할 (S)"
       >
@@ -92,8 +122,24 @@ export default function Toolbar({ onExport }: ToolbarProps) {
       </button>
 
       <div className="toolbar-divider" aria-hidden="true" />
+      <button type="button" className={`toolbar-btn ${isVideoTrackLocked ? "active" : ""}`} onClick={() => setVideoTrackLocked(!isVideoTrackLocked)} title="비디오 트랙 잠금">
+        {isVideoTrackLocked ? "🔒 트랙잠금" : "🔓 트랙열기"}
+      </button>
+      <button type="button" className={`toolbar-btn ${isAudioMuted ? "active" : ""}`} onClick={() => setAudioMuted(!isAudioMuted)} title="오디오 음소거">
+        {isAudioMuted ? "🔇 음소거" : "🔊 소리켜기"}
+      </button>
+      <div className="toolbar-divider" aria-hidden="true" />
 
       <div className="toolbar-spacer" />
+      <button
+        type="button"
+        className="toolbar-btn"
+        onClick={() => downloadProjectFile(useEditorStore.getState())}
+        aria-label="프로젝트 파일 다운로드"
+        title="프로젝트 파일(JSON) 다운로드"
+      >
+        💾 프로젝트
+      </button>
 
       {/* Export */}
       <button
