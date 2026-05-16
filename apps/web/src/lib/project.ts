@@ -1,19 +1,23 @@
 "use client";
 
-export function downloadProjectFile(state: {
-  [key: string]: unknown;
-  videoClips: unknown[];
-  audioClip: unknown;
-  captions: unknown[];
-  stickers: unknown[];
-  images: unknown[];
-  transitionType: unknown;
-  transitionDuration: unknown;
-  videoEffect: unknown;
-  isAudioMuted: boolean;
-  isVideoTrackLocked: boolean;
-  timelineZoom: number;
-}) {
+import { useEditorStore } from "@/store/editorStore";
+
+type ProjectState = Pick<
+  ReturnType<typeof useEditorStore.getState>,
+  | "videoClips"
+  | "audioClip"
+  | "captions"
+  | "stickers"
+  | "images"
+  | "transitionType"
+  | "transitionDuration"
+  | "videoEffect"
+  | "isAudioMuted"
+  | "isVideoTrackLocked"
+  | "timelineZoom"
+>;
+
+export function downloadProjectFile(state: ProjectState) {
   const payload = {
     version: 1,
     exportedAt: new Date().toISOString(),
