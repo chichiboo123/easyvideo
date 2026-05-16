@@ -10,6 +10,10 @@ export default function ExportButton() {
   const captions = useEditorStore((s) => s.captions);
   const stickers = useEditorStore((s) => s.stickers);
   const setStep = useEditorStore((s) => s.setStep);
+  const isAudioMuted = useEditorStore((s) => s.isAudioMuted);
+  const transitionType = useEditorStore((s) => s.transitionType);
+  const transitionDuration = useEditorStore((s) => s.transitionDuration);
+  const videoEffect = useEditorStore((s) => s.videoEffect);
 
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -30,6 +34,10 @@ export default function ExportButton() {
         audio: audioClip,
         captions,
         stickers,
+        isAudioMuted,
+        transitionType,
+        transitionDuration,
+        videoEffect,
         onProgress: (r) => setProgress(Math.min(1, Math.max(0, r))),
       });
       const url = URL.createObjectURL(blob);

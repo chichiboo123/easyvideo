@@ -34,6 +34,10 @@ export async function getFFmpeg(
 interface ExportOptions {
   clips: VideoClip[];
   audio: AudioClip | null;
+  isAudioMuted?: boolean;
+  transitionType?: "none" | "fade";
+  transitionDuration?: number;
+  videoEffect?: "none" | "vintage" | "bright" | "bw";
   captions: Caption[];
   stickers: Sticker[];
   onProgress?: (ratio: number) => void;
@@ -51,6 +55,10 @@ export async function exportVideo({
   audio,
   captions,
   stickers,
+  isAudioMuted = false,
+  transitionType = "none",
+  transitionDuration = 0.4,
+  videoEffect = "none",
   onProgress,
 }: ExportOptions): Promise<Blob> {
   if (clips.length === 0) throw new Error("내보낼 영상이 없어요");
@@ -65,22 +73,25 @@ export async function exportVideo({
     inputNames.push(name);
   }
 
-  // Concat list file.
-  const listBody = inputNames.map((n) => `file '${n}'`).join("\n");
-  await instance.writeFile("list.txt", new TextEncoder().encode(listBody));
-
-  // First: concat into a single intermediate file.
-  await instance.exec([
-    "-f",
-    "concat",
-    "-safe",
-    "0",
-    "-i",
-    "list.txt",
-    "-c",
-    "copy",
-    "concat.mp4",
-  ]);
+  if (transitionType === "fade" && clips.length > 1) {
+    const fc: string[] = [];
+    let cumulative = clips[0].duration;
+    fc.push("[0:v]format=yuv420p[v0]");
+    for (let i = 1; i < clips.length; i++) {
+      const offset = Math.max(0, cumulative - transitionDuration);
+      const left = i === 1 ? "[v0]" : `[x${i - 1}]`;
+      const right = `[${i}:v]`;
+      const out = `[x${i}]`;
+      fc.push(`${left}${right}xfade=transition=fade:duration=${transitionDuration}:offset=${offset}${out}`);
+      cumulative += clips[i].duration - transitionDuration;
+    }
+    const xfadeInputs = inputNames.flatMap((n) => ["-i", n]);
+    await instance.exec([...xfadeInputs, "-filter_complex", fc.join(";"), "-map", `[x${clips.length - 1}]`, "-pix_fmt", "yuv420p", "-preset", "ultrafast", "concat.mp4"]);
+  } else {
+    const listBody = inputNames.map((n) => `file '${n}'`).join("\n");
+    await instance.writeFile("list.txt", new TextEncoder().encode(listBody));
+    await instance.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "concat.mp4"]);
+  }
 
   // Build drawtext filters for captions and emoji stickers (treated as text).
   const filters: string[] = [];
@@ -96,21 +107,24 @@ export async function exportVideo({
   }
 
   const args: string[] = ["-i", "concat.mp4"];
-  if (audio) {
+  if (audio && !isAudioMuted) {
     await instance.writeFile("audio.mp3", await fetchFile(audio.url));
     args.push("-i", "audio.mp3");
   }
 
-  if (filters.length > 0) {
-    args.push("-vf", filters.join(","));
-  }
+  const effectFilters: string[] = [];
+  if (videoEffect === "vintage") effectFilters.push("eq=saturation=0.8:contrast=1.15:brightness=0.03");
+  if (videoEffect === "bright") effectFilters.push("eq=brightness=0.08:saturation=1.12");
+  if (videoEffect === "bw") effectFilters.push("hue=s=0");
+  const allFilters = [...effectFilters, ...filters];
+  if (allFilters.length > 0) args.push("-vf", allFilters.join(","));
 
-  if (audio) {
+  if (audio && !isAudioMuted) {
     args.push("-map", "0:v:0", "-map", "1:a:0", "-shortest");
   }
 
   args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p");
-  if (audio) args.push("-c:a", "aac");
+  if (audio && !isAudioMuted) args.push("-c:a", "aac");
   args.push("out.mp4");
 
   await instance.exec(args);

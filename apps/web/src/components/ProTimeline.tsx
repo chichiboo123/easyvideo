@@ -34,6 +34,13 @@ export default function ProTimeline() {
   const selectedImageId = useEditorStore((s) => s.selectedImageId);
   const timelineZoom = useEditorStore((s) => s.timelineZoom);
   const totalDuration = useEditorStore((s) => s.totalDuration);
+  const isVideoTrackLocked = useEditorStore((s) => s.isVideoTrackLocked);
+  const setTransitionType = useEditorStore((s) => s.setTransitionType);
+  const setTransitionDuration = useEditorStore((s) => s.setTransitionDuration);
+  const transitionType = useEditorStore((s) => s.transitionType);
+  const transitionDuration = useEditorStore((s) => s.transitionDuration);
+  const videoEffect = useEditorStore((s) => s.videoEffect);
+  const setVideoEffect = useEditorStore((s) => s.setVideoEffect);
 
   const selectClip = useEditorStore((s) => s.selectClip);
   const selectCaption = useEditorStore((s) => s.selectCaption);
@@ -109,7 +116,7 @@ export default function ProTimeline() {
           type="button"
           className="tl-btn"
           onClick={splitClipAtPlayhead}
-          disabled={videoClips.length === 0}
+          disabled={videoClips.length === 0 || isVideoTrackLocked}
           aria-label="재생 위치에서 분할"
           title="현재 재생 위치에서 클립을 분할합니다 (S)"
         >
@@ -120,6 +127,19 @@ export default function ProTimeline() {
         </button>
 
         <div className="toolbar-divider" style={{ margin: "0 2px" }} aria-hidden="true" />
+        <select value={transitionType} onChange={(e) => setTransitionType(e.target.value as "none" | "fade")} className="prop-input" style={{ width: 92, height: 28 }}>
+          <option value="none">전환 없음</option>
+          <option value="fade">페이드 전환</option>
+        </select>
+        {transitionType === "fade" && (
+          <input type="range" min={0.2} max={1.5} step={0.1} value={transitionDuration} onChange={(e) => setTransitionDuration(Number(e.target.value))} aria-label="전환 길이" />
+        )}
+        <select value={videoEffect} onChange={(e) => setVideoEffect(e.target.value as "none" | "vintage" | "bright" | "bw")} className="prop-input" style={{ width: 96, height: 28 }}>
+          <option value="none">효과 없음</option>
+          <option value="vintage">빈티지</option>
+          <option value="bright">화사하게</option>
+          <option value="bw">흑백</option>
+        </select>
 
         <button type="button" className="tl-btn" onClick={() => setTimelineZoom(pxPerSec + 20)} aria-label="확대">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
@@ -219,13 +239,13 @@ export default function ProTimeline() {
                     className={`clip-block clip-video ${selectedClipId === clip.id ? "selected" : ""}`}
                     style={{ left, width }}
                     onClick={(e) => { e.stopPropagation(); selectClip(clip.id); }}
-                    draggable
-                    onDragStart={() => { dragSrcIdx.current = idx; }}
+                    draggable={!isVideoTrackLocked}
+                    onDragStart={() => { if (!isVideoTrackLocked) dragSrcIdx.current = idx; }}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      if (dragSrcIdx.current !== null && dragSrcIdx.current !== idx) {
+                      if (!isVideoTrackLocked && dragSrcIdx.current !== null && dragSrcIdx.current !== idx) {
                         useEditorStore.getState().reorderVideoClips(dragSrcIdx.current, idx);
                       }
                       dragSrcIdx.current = null;
@@ -236,8 +256,36 @@ export default function ProTimeline() {
                     aria-label={`${clip.name} 비디오 클립, ${formatTime(clip.duration)}`}
                     aria-pressed={selectedClipId === clip.id}
                     title={`${clip.name} (${formatTime(clip.duration)}) — 드래그로 순서 변경`}
-                  >
+                    >
                     <span className="clip-label">{clip.name}</span>
+                    {!isVideoTrackLocked && (
+                      <>
+                        <span className="clip-edge-handle left" onMouseDown={(e) => {
+                          e.preventDefault(); e.stopPropagation();
+                          const startX = e.clientX;
+                          const startDuration = clip.duration;
+                          const onMove = (ev: MouseEvent) => {
+                            const delta = (ev.clientX - startX) / pxPerSec;
+                            const nextDuration = Math.max(0.2, startDuration - delta);
+                            useEditorStore.getState().updateVideoClipDuration(clip.id, nextDuration);
+                          };
+                          const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                          window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+                        }} />
+                        <span className="clip-edge-handle right" onMouseDown={(e) => {
+                          e.preventDefault(); e.stopPropagation();
+                          const startX = e.clientX;
+                          const startDuration = clip.duration;
+                          const onMove = (ev: MouseEvent) => {
+                            const delta = (ev.clientX - startX) / pxPerSec;
+                            const nextDuration = Math.max(0.2, startDuration + delta);
+                            useEditorStore.getState().updateVideoClipDuration(clip.id, nextDuration);
+                          };
+                          const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                          window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+                        }} />
+                      </>
+                    )}
                   </div>
                 );
               })}

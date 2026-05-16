@@ -67,3 +67,5 @@ export interface Sticker {
 }
 
 export type EditorStep = 1 | 2 | 3;
+export type TransitionType = "none" | "fade";
+export type VideoEffectType = "none" | "vintage" | "bright" | "bw";

@@ -25,6 +25,9 @@ export default function EasyVideoEditor() {
   const removeImage = useEditorStore((s) => s.removeImage);
   const setTimelineZoom = useEditorStore((s) => s.setTimelineZoom);
   const timelineZoom = useEditorStore((s) => s.timelineZoom);
+  const undo = useEditorStore((s) => s.undo);
+  const redo = useEditorStore((s) => s.redo);
+  const isVideoTrackLocked = useEditorStore((s) => s.isVideoTrackLocked);
 
   // ── Global keyboard shortcuts ──────────────────────────────────────────────
   useEffect(() => {
@@ -34,17 +37,25 @@ export default function EasyVideoEditor() {
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
       switch (e.key) {
+        case "z":
+        case "Z":
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            if (e.shiftKey) redo();
+            else undo();
+          }
+          break;
         case " ":
           e.preventDefault();
           setPlaying(!isPlaying);
           break;
         case "s":
         case "S":
-          splitClipAtPlayhead();
+          if (!isVideoTrackLocked) splitClipAtPlayhead();
           break;
         case "Delete":
         case "Backspace":
-          if (selectedClipId) removeVideoClip(selectedClipId);
+          if (selectedClipId && !isVideoTrackLocked) removeVideoClip(selectedClipId);
           if (selectedCaptionId) removeCaption(selectedCaptionId);
           if (selectedStickerId) removeSticker(selectedStickerId);
           if (selectedImageId) removeImage(selectedImageId);
@@ -68,6 +79,8 @@ export default function EasyVideoEditor() {
     selectedStickerId, removeSticker,
     selectedImageId, removeImage,
     timelineZoom, setTimelineZoom,
+    undo, redo,
+    isVideoTrackLocked,
   ]);
 
   return (
