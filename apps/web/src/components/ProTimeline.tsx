@@ -145,11 +145,11 @@ export default function ProTimeline() {
     <section className="timeline" aria-label="타임라인">
       {/* Timeline toolbar */}
       <div className="timeline-toolbar">
-        <button type="button" className="tl-btn"
+        <button type="button" className="tl-btn tl-btn-primary"
           onClick={splitClipAtPlayhead}
           disabled={videoClips.length === 0 || isVideoTrackLocked}
           aria-label="재생 위치에서 분할"
-          title="현재 재생 위치에서 클립을 분할합니다 (S)"
+          title="현재 위치에서 분할 (S)"
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
             <path strokeLinecap="round" d="M6 9a3 3 0 100-6 3 3 0 000 6zm12 12a3 3 0 100-6 3 3 0 000 6zM5.5 8.5l13 7"/>
@@ -157,73 +157,69 @@ export default function ProTimeline() {
           분할
         </button>
 
-        <div className="toolbar-divider" style={{ margin: "0 2px" }} aria-hidden="true" />
+        <span className="tl-divider" aria-hidden="true" />
+
         <select value={transitionType}
           onChange={(e) => setTransitionType(e.target.value as any)}
-          className="prop-input" style={{ width: 100, height: 28 }}
-          aria-label="전환 효과"
+          className="tl-select"
+          aria-label="전환"
+          title="장면 전환 효과"
         >
           <option value="none">전환 없음</option>
-          <option value="fade">페이드</option>
-          <option value="dissolve">디졸브</option>
-          <option value="slide-left">슬라이드</option>
-          <option value="wipe-up">와이프 업</option>
+          <option value="fade">전환: 페이드</option>
+          <option value="dissolve">전환: 디졸브</option>
+          <option value="slide-left">전환: 슬라이드</option>
+          <option value="wipe-up">전환: 와이프</option>
         </select>
-        {transitionType !== "none" && (
-          <input type="range" min={0.2} max={2.0} step={0.1}
-            value={transitionDuration}
-            onChange={(e) => setTransitionDuration(Number(e.target.value))}
-            aria-label="전환 길이"
-            title={`전환 길이 ${transitionDuration.toFixed(1)}초`}
-            style={{ width: 80 }}
-          />
-        )}
         <select value={videoEffect}
           onChange={(e) => setVideoEffect(e.target.value as any)}
-          className="prop-input" style={{ width: 90, height: 28 }}
+          className="tl-select"
           aria-label="영상 효과"
+          title="영상 필터 효과"
         >
           <option value="none">효과 없음</option>
-          <option value="vintage">빈티지</option>
-          <option value="bright">화사하게</option>
-          <option value="bw">흑백</option>
-          <option value="warm">따뜻하게</option>
-          <option value="cool">차갑게</option>
-          <option value="blur">블러</option>
-          <option value="vignette">비네트</option>
+          <option value="vintage">효과: 빈티지</option>
+          <option value="bright">효과: 화사</option>
+          <option value="bw">효과: 흑백</option>
+          <option value="warm">효과: 따뜻</option>
+          <option value="cool">효과: 차가움</option>
+          <option value="blur">효과: 블러</option>
+          <option value="vignette">효과: 비네트</option>
         </select>
 
         <button type="button"
-          className={`tl-btn ${snapEnabled ? "active" : ""}`}
+          className={`tl-icon-btn ${snapEnabled ? "on" : ""}`}
           onClick={() => setSnapEnabled(!snapEnabled)}
           aria-pressed={snapEnabled}
-          title="스냅 (클립·재생헤드·마커에 자석)"
+          title="스냅 (자석)"
         >
-          🧲 스냅
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M5 4v6a7 7 0 0 0 14 0V4"/><path d="M5 4h4M15 4h4"/><path d="M9 4v6M15 4v6"/>
+          </svg>
         </button>
 
-        <div className="toolbar-divider" style={{ margin: "0 2px" }} aria-hidden="true" />
+        <div className="timeline-spacer" />
 
-        <button type="button" className="tl-btn" onClick={() => setTimelineZoom(pxPerSec + 20)} aria-label="확대">
+        {/* Zoom + time on the right */}
+        <button type="button" className="tl-icon-btn" onClick={() => setTimelineZoom(pxPerSec - 20)} aria-label="축소" title="축소 (-)">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-            <circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5M11 8v6M8 11h6"/>
+            <circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5M8 11h6"/>
           </svg>
         </button>
         <input type="range" min={20} max={400} step={10}
           value={pxPerSec}
           onChange={(e) => setTimelineZoom(Number(e.target.value))}
-          style={{ width: 80, accentColor: "var(--accent)" }}
+          className="tl-zoom-range"
           aria-label="타임라인 배율"
-          title="타임라인 확대/축소"
+          title={`타임라인 ${Math.round(pxPerSec / 80 * 100)}%`}
         />
-        <button type="button" className="tl-btn" onClick={() => setTimelineZoom(pxPerSec - 20)} aria-label="축소">
+        <button type="button" className="tl-icon-btn" onClick={() => setTimelineZoom(pxPerSec + 20)} aria-label="확대" title="확대 (+)">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-            <circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5M8 11h6"/>
+            <circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5M11 8v6M8 11h6"/>
           </svg>
         </button>
-        <span className="tl-zoom-label">{Math.round(pxPerSec / 80 * 100)}%</span>
 
-        <div className="timeline-spacer" />
+        <span className="tl-divider" aria-hidden="true" />
         <span className="tl-time-display" aria-label="현재 / 전체 시간">
           {formatTime(currentTime)} / {formatTime(total)}
         </span>
