@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { useEditorStore, generateId } from "@/store/editorStore";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useEditorStore, generateId, defaultVideoClip, defaultCaption } from "@/store/editorStore";
 import { saveFile } from "@/lib/storage";
-import type { CaptionColor } from "@/types";
+import { toast } from "@/lib/notifications";
+import { parseSrt, parseVtt, downloadSrt } from "@/lib/srt";
 
 const ACCEPTED_VIDEO = ["video/mp4", "video/quicktime", "video/webm"];
 
@@ -15,24 +16,25 @@ const PRESET_BGM = [
   { id: "bgm-5", name: "Upbeat Pop", emoji: "🎵", duration: 100 },
 ];
 
-const CAPTION_COLORS: { value: CaptionColor; label: string }[] = [
-  { value: "#FFFFFF", label: "흰색" },
-  { value: "#000000", label: "검정" },
-  { value: "#FF4D4D", label: "빨강" },
-  { value: "#3D8BFF", label: "파랑" },
-  { value: "#FFD93D", label: "노랑" },
-  { value: "#4CD964", label: "초록" },
-];
-
 const STICKERS = [
-  "😀","😂","🥰","😎","🤩","🥳","😜","🤔",
-  "🐶","🐱","🦄","🐼","🐸","🦊","🐯","🐙",
-  "⭐","✨","💖","🌈","🌸","🌟","🎉","💫",
-  "🍕","🍔","🍦","🍩","🍓","🎂","🌮","🧁",
-  "⚽","🏀","🎮","🎵","🎨","📚","🚀","🌍",
+  "😀","😂","🥰","😎","🤩","🥳","😜","🤔","😱","😭",
+  "🐶","🐱","🦄","🐼","🐸","🦊","🐯","🐙","🐹","🐵",
+  "⭐","✨","💖","🌈","🌸","🌟","🎉","💫","💥","🔥",
+  "🍕","🍔","🍦","🍩","🍓","🎂","🌮","🧁","🍿","🍭",
+  "⚽","🏀","🎮","🎵","🎨","📚","🚀","🌍","🏆","🎁",
+  "❤️","💛","💙","💚","🧡","💜","🖤","🤍","🤎","💕",
+  "👍","👏","🙌","✌️","🤘","👌","🤝","🙏","💪","🤞",
 ];
 
-type Tab = "media" | "audio" | "text" | "sticker" | "image";
+const TEXT_PRESETS = [
+  { label: "기본", patch: { color: "#FFFFFF", fontFamily: "Noto Sans KR", fontWeight: 700, strokeColor: "#000000", strokeWidth: 2 } },
+  { label: "팝", patch: { color: "#FFD93D", fontFamily: "Black Han Sans", fontWeight: 700, strokeColor: "#000000", strokeWidth: 4, shadowBlur: 8 } },
+  { label: "네온", patch: { color: "#3DF0FF", fontFamily: "Audiowide", strokeWidth: 0, shadowColor: "#3DF0FF", shadowBlur: 16, shadowOffsetX: 0, shadowOffsetY: 0 } },
+  { label: "노란상자", patch: { color: "#000000", fontFamily: "Do Hyeon", backgroundColor: "#FFD93D", bgPadding: 10, bgBorderRadius: 8, strokeWidth: 0 } },
+  { label: "유튜브", patch: { color: "#FFFFFF", fontFamily: "Roboto", fontWeight: 900, backgroundColor: "#000000", bgPadding: 6, bgBorderRadius: 4, strokeWidth: 0 } },
+];
+
+type Tab = "media" | "audio" | "text" | "sticker" | "image" | "markers";
 
 function formatDur(sec: number) {
   const m = Math.floor(sec / 60);
@@ -44,23 +46,36 @@ export default function MediaPanel() {
   const [tab, setTab] = useState<Tab>("media");
   const [dragOver, setDragOver] = useState(false);
   const [captionText, setCaptionText] = useState("");
-  const [captionColor, setCaptionColor] = useState<CaptionColor>("#FFFFFF");
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const srtInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordChunksRef = useRef<Blob[]>([]);
 
   const videoClips = useEditorStore((s) => s.videoClips);
-  const audioClip = useEditorStore((s) => s.audioClip);
+  const audioClips = useEditorStore((s) => s.audioClips);
+  const markers = useEditorStore((s) => s.markers);
+  const captions = useEditorStore((s) => s.captions);
   const addVideoClip = useEditorStore((s) => s.addVideoClip);
-  const setAudioClip = useEditorStore((s) => s.setAudioClip);
+  const addAudioClip = useEditorStore((s) => s.addAudioClip);
+  const removeAudioClip = useEditorStore((s) => s.removeAudioClip);
   const addCaption = useEditorStore((s) => s.addCaption);
+  const addCaptionsBatch = useEditorStore((s) => s.addCaptionsBatch);
   const addSticker = useEditorStore((s) => s.addSticker);
   const addImage = useEditorStore((s) => s.addImage);
+  const addMarker = useEditorStore((s) => s.addMarker);
+  const updateMarker = useEditorStore((s) => s.updateMarker);
+  const removeMarker = useEditorStore((s) => s.removeMarker);
+  const setSeekRequest = useEditorStore((s) => s.setSeekRequest);
+  const setCurrentTime = useEditorStore((s) => s.setCurrentTime);
+
+  const bgmAudio = audioClips.find((a) => a.track === 1 || a.track === undefined);
 
   // ── Video upload ──────────────────────────────────────────────────────────
-
   const handleVideoFiles = useCallback(
     async (files: FileList | File[]) => {
       setUploadError(null);
@@ -75,35 +90,89 @@ export default function MediaPanel() {
           vid.onloadedmetadata = () => res();
           vid.onerror = () => res();
         });
-        addVideoClip({
+        const duration = isFinite(vid.duration) ? vid.duration : 5;
+        addVideoClip(defaultVideoClip({
           id: generateId(),
           name: file.name.replace(/\.[^.]+$/, ""),
-          url,
-          duration: isFinite(vid.duration) ? vid.duration : 5,
-          startTime: 0,
-          fileId: id,
-        });
+          url, duration, sourceDuration: duration,
+          inPoint: 0, outPoint: duration,
+          startTime: 0, fileId: id,
+        }));
       }
+      toast({ message: `${Array.from(files).length}개 영상을 추가했어요`, type: "success" });
     },
     [addVideoClip],
   );
 
   // ── Audio upload ──────────────────────────────────────────────────────────
-
-  function handleAudioFile(file: File) {
+  function handleAudioFile(file: File, track: 1 | 2 | 3) {
     const url = URL.createObjectURL(file);
     const a = new Audio(url);
     a.onloadedmetadata = () => {
-      setAudioClip({
+      addAudioClip({
         id: `audio-${Date.now()}`,
         name: file.name.replace(/\.[^.]+$/, ""),
-        url,
-        duration: a.duration,
+        url, duration: a.duration,
+        track, volume: 1, fadeIn: 0, fadeOut: 0, startTime: 0,
       });
+      toast({ message: `오디오를 M${track} 트랙에 추가했어요`, type: "success" });
     };
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Voice-over recording ──────────────────────────────────────────────────
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      recordChunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data.size > 0) recordChunksRef.current.push(e.data); };
+      rec.onstop = () => {
+        const blob = new Blob(recordChunksRef.current, { type: "audio/webm" });
+        const url = URL.createObjectURL(blob);
+        const a = new Audio(url);
+        a.onloadedmetadata = () => {
+          addAudioClip({
+            id: `voiceover-${Date.now()}`,
+            name: `보이스오버 ${new Date().toLocaleTimeString()}`,
+            url,
+            duration: isFinite(a.duration) ? a.duration : 5,
+            track: 3,
+            volume: 1, fadeIn: 0, fadeOut: 0, startTime: 0,
+          });
+          toast({ message: "녹음을 M3 트랙에 추가했어요", type: "success" });
+        };
+        stream.getTracks().forEach((t) => t.stop());
+      };
+      rec.start();
+      mediaRecorderRef.current = rec;
+      setIsRecording(true);
+    } catch (e) {
+      toast({ message: "마이크 권한이 필요해요", type: "error" });
+    }
+  }
+  function stopRecording() {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+  }
+
+  // ── SRT/VTT import ────────────────────────────────────────────────────────
+  function handleSrtFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || "");
+      const cues = file.name.toLowerCase().endsWith(".vtt") ? parseVtt(text) : parseSrt(text);
+      if (cues.length === 0) {
+        toast({ message: "자막 파일에서 큐를 찾지 못했어요", type: "warning" });
+        return;
+      }
+      addCaptionsBatch(cues);
+      toast({ message: `자막 ${cues.length}개를 가져왔어요`, type: "success" });
+    };
+    reader.readAsText(file);
+  }
+
+  // ── Cleanup recording on unmount ─────────────────────────────────────────
+  useEffect(() => () => { mediaRecorderRef.current?.stop(); }, []);
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "media", label: "미디어" },
@@ -111,6 +180,7 @@ export default function MediaPanel() {
     { id: "text", label: "텍스트" },
     { id: "sticker", label: "스티커" },
     { id: "image", label: "이미지" },
+    { id: "markers", label: "마커" },
   ];
 
   return (
@@ -146,9 +216,7 @@ export default function MediaPanel() {
                 <path d="M10 8l6 4-6 4V8z"/>
               </svg>
               <p>영상을 여기에 드래그하거나</p>
-              <button
-                type="button"
-                className="btn-upload"
+              <button type="button" className="btn-upload"
                 onClick={() => inputRef.current?.click()}
                 aria-label="영상 파일 선택"
                 title="mp4, mov, webm 파일을 불러옵니다"
@@ -158,12 +226,9 @@ export default function MediaPanel() {
                 </svg>
                 파일 열기
               </button>
-              <input
-                ref={inputRef}
-                type="file"
+              <input ref={inputRef} type="file"
                 accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
-                multiple
-                style={{ display: "none" }}
+                multiple style={{ display: "none" }}
                 onChange={(e) => e.target.files && handleVideoFiles(e.target.files)}
                 aria-label="영상 파일 선택"
               />
@@ -193,22 +258,34 @@ export default function MediaPanel() {
         {/* ── 오디오 tab ── */}
         {tab === "audio" && (
           <>
-            <label className="btn-upload" style={{ marginBottom: 12 }} title="MP3, WAV 파일을 불러옵니다">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <path d="M12 5v14M5 12l7-7 7 7"/>
-              </svg>
-              오디오 파일 열기
-              <input
-                ref={audioInputRef}
-                type="file"
-                accept="audio/*"
-                style={{ display: "none" }}
-                onChange={(e) => { if (e.target.files?.[0]) handleAudioFile(e.target.files[0]); }}
-                aria-label="오디오 파일 선택"
-              />
-            </label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <label className="btn-upload" title="MP3, WAV 파일을 BGM(M1)으로 추가">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <path d="M12 5v14M5 12l7-7 7 7"/>
+                </svg>
+                BGM 추가 (M1)
+                <input ref={audioInputRef} type="file" accept="audio/*"
+                  style={{ display: "none" }}
+                  onChange={(e) => { if (e.target.files?.[0]) handleAudioFile(e.target.files[0], 1); e.target.value = ""; }}
+                />
+              </label>
+              <label className="btn-upload" title="효과음을 M2 트랙에 추가">
+                효과음 추가 (M2)
+                <input type="file" accept="audio/*"
+                  style={{ display: "none" }}
+                  onChange={(e) => { if (e.target.files?.[0]) handleAudioFile(e.target.files[0], 2); e.target.value = ""; }}
+                />
+              </label>
+              <button type="button"
+                className={`btn-upload ${isRecording ? "btn-recording" : ""}`}
+                onClick={() => isRecording ? stopRecording() : startRecording()}
+                aria-pressed={isRecording}
+              >
+                {isRecording ? "● 녹음 중지" : "🎤 보이스 오버 녹음 (M3)"}
+              </button>
+            </div>
 
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", margin: "16px 0 8px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
               기본 제공 BGM
             </div>
             <div className="audio-preset-list">
@@ -216,13 +293,18 @@ export default function MediaPanel() {
                 <button
                   key={b.id}
                   type="button"
-                  className={`audio-preset ${audioClip?.id === b.id ? "selected" : ""}`}
-                  onClick={() =>
-                    setAudioClip(
-                      audioClip?.id === b.id ? null : { id: b.id, name: b.name, url: "", duration: b.duration, isPreset: true }
-                    )
-                  }
-                  aria-pressed={audioClip?.id === b.id}
+                  className={`audio-preset ${bgmAudio?.id === b.id ? "selected" : ""}`}
+                  onClick={() => {
+                    if (bgmAudio?.id === b.id) {
+                      removeAudioClip(b.id);
+                    } else {
+                      addAudioClip({
+                        id: b.id, name: b.name, url: "", duration: b.duration,
+                        isPreset: true, track: 1, volume: 0.8, fadeIn: 0, fadeOut: 0, startTime: 0,
+                      });
+                    }
+                  }}
+                  aria-pressed={bgmAudio?.id === b.id}
                   title={`${b.name} - ${formatDur(b.duration)}`}
                 >
                   <span className="audio-preset-icon">{b.emoji}</span>
@@ -233,6 +315,22 @@ export default function MediaPanel() {
                 </button>
               ))}
             </div>
+
+            {audioClips.length > 0 && (
+              <>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", margin: "16px 0 6px", fontWeight: 700, textTransform: "uppercase" }}>
+                  현재 오디오
+                </div>
+                <ul className="audio-list">
+                  {audioClips.map((a) => (
+                    <li key={a.id} className="audio-list-item">
+                      <span>M{a.track ?? 1} · {a.name}</span>
+                      <button type="button" className="tl-btn" onClick={() => removeAudioClip(a.id)}>삭제</button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </>
         )}
 
@@ -243,41 +341,33 @@ export default function MediaPanel() {
             <textarea
               value={captionText}
               onChange={(e) => setCaptionText(e.target.value)}
-              placeholder="자막을 입력하세요..."
+              placeholder="자막을 입력하세요... (여러 줄도 가능)"
               aria-label="자막 텍스트"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                  if (captionText.trim()) { addCaption(captionText.trim(), captionColor); setCaptionText(""); }
+                  if (captionText.trim()) { addCaption({ text: captionText.trim() }); setCaptionText(""); }
                 }
               }}
+              style={{ minHeight: 96 }}
             />
 
-            <div>
-              <div className="label-row">
-                <span>색상</span>
-              </div>
-              <div className="color-swatch-row" role="radiogroup" aria-label="자막 색상 선택">
-                {CAPTION_COLORS.map((c) => (
-                  <button
-                    key={c.value}
-                    type="button"
-                    role="radio"
-                    className={`color-swatch ${captionColor === c.value ? "active" : ""}`}
-                    style={{ background: c.value, outline: c.value === "#FFFFFF" ? "1px solid #555" : undefined }}
-                    onClick={() => setCaptionColor(c.value)}
-                    aria-checked={captionColor === c.value}
-                    aria-label={c.label}
-                    title={c.label}
-                  />
-                ))}
-              </div>
+            <div className="label-row"><span>빠른 스타일</span></div>
+            <div className="text-presets">
+              {TEXT_PRESETS.map((p) => (
+                <button key={p.label} type="button" className="text-preset"
+                  onClick={() => {
+                    addCaption({ text: captionText.trim() || "텍스트", ...(p.patch as any) });
+                    setCaptionText("");
+                  }}
+                >{p.label}</button>
+              ))}
             </div>
 
             <button
               type="button"
               className="btn-add-text"
               onClick={() => {
-                if (captionText.trim()) { addCaption(captionText.trim(), captionColor); setCaptionText(""); }
+                if (captionText.trim()) { addCaption({ text: captionText.trim() }); setCaptionText(""); }
               }}
               disabled={!captionText.trim()}
               aria-label="자막 추가"
@@ -286,13 +376,50 @@ export default function MediaPanel() {
               자막 추가
             </button>
 
-            <p style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center" }}>
+            <div className="label-row" style={{ marginTop: 12 }}><span>자막 파일</span></div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <label className="btn-upload" style={{ flex: 1, margin: 0 }} title="SRT/VTT 자막 파일 가져오기">
+                SRT/VTT 가져오기
+                <input ref={srtInputRef} type="file" accept=".srt,.vtt,text/plain"
+                  style={{ display: "none" }}
+                  onChange={(e) => { if (e.target.files?.[0]) handleSrtFile(e.target.files[0]); e.target.value = ""; }}
+                />
+              </label>
+              <button type="button" className="btn-upload" style={{ flex: 1, margin: 0 }}
+                onClick={() => {
+                  if (captions.length === 0) { toast({ message: "내보낼 자막이 없어요", type: "warning" }); return; }
+                  downloadSrt(captions);
+                  toast({ message: "SRT 다운로드 시작", type: "success" });
+                }}
+              >SRT 내보내기</button>
+            </div>
+
+            <p style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", marginTop: 6 }}>
               Ctrl+Enter로도 추가할 수 있어요
             </p>
           </div>
         )}
 
+        {/* ── 스티커 tab ── */}
+        {tab === "sticker" && (
+          <div className="sticker-grid" role="list" aria-label="스티커 선택">
+            {STICKERS.map((emoji, idx) => (
+              <button
+                key={`${emoji}-${idx}`}
+                type="button"
+                role="listitem"
+                className="sticker-btn-pro"
+                onClick={() => addSticker(emoji)}
+                aria-label={`${emoji} 스티커 추가`}
+                title={`${emoji} 스티커를 추가합니다`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
 
+        {/* ── 이미지 tab ── */}
         {tab === "image" && (
           <div>
             <button
@@ -304,41 +431,52 @@ export default function MediaPanel() {
             >
               이미지 파일 열기
             </button>
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/*"
+            <input ref={imageInputRef} type="file" accept="image/*"
               style={{ display: "none" }}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
                 const url = URL.createObjectURL(file);
                 addImage(file.name.replace(/\.[^.]+$/, ""), url);
+                e.target.value = "";
               }}
               aria-label="이미지 파일"
             />
-            <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-              추가 후 미리보기에서 드래그로 위치를 이동하고, 속성 패널에서 크기/시간을 조절하세요.
+            <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8, lineHeight: 1.6 }}>
+              미리보기에서 드래그로 위치 이동,<br/>속성 패널에서 크기·시간 조절.
             </p>
           </div>
         )}
 
-        {/* ── 스티커 tab ── */}
-        {tab === "sticker" && (
-          <div className="sticker-grid" role="list" aria-label="스티커 선택">
-            {STICKERS.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                role="listitem"
-                className="sticker-btn-pro"
-                onClick={() => addSticker(emoji)}
-                aria-label={`${emoji} 스티커 추가`}
-                title={`${emoji} 스티커를 추가합니다`}
-              >
-                {emoji}
-              </button>
-            ))}
+        {/* ── 마커 tab ── */}
+        {tab === "markers" && (
+          <div>
+            <button type="button" className="btn-upload" onClick={() => { addMarker(); toast({ message: "마커를 현재 위치에 추가했어요", type: "info" }); }}>
+              현재 위치에 마커 추가 (M)
+            </button>
+            {markers.length === 0 ? (
+              <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 12, textAlign: "center" }}>
+                재생 위치를 표시할 마커를 추가해 보세요
+              </p>
+            ) : (
+              <ul className="marker-list">
+                {markers.map((m) => (
+                  <li key={m.id} className="marker-list-item">
+                    <span className="marker-dot" style={{ background: m.color }} />
+                    <button type="button" className="marker-time"
+                      onClick={() => { setCurrentTime(m.time); setSeekRequest(m.time); }}
+                      title="이 시간으로 이동"
+                    >{formatDur(m.time)}</button>
+                    <input className="prop-input" style={{ flex: 1, height: 26 }}
+                      value={m.label}
+                      onChange={(e) => updateMarker(m.id, { label: e.target.value })}
+                      aria-label="마커 라벨"
+                    />
+                    <button type="button" className="tl-btn" onClick={() => removeMarker(m.id)} aria-label="마커 삭제">✕</button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </div>
