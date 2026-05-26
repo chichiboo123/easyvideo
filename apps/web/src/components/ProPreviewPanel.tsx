@@ -245,12 +245,11 @@ export default function ProPreviewPanel() {
             />
           ) : (
             <div className="preview-empty">
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" aria-hidden="true">
+              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" aria-hidden="true">
                 <rect x="2" y="3" width="20" height="14" rx="2"/>
                 <path d="M10 8l6 4-6 4V8z"/>
               </svg>
-              <p>왼쪽 패널에서 영상을 추가하세요</p>
-              <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>드래그&드롭 또는 “파일 열기”</p>
+              <p>영상을 추가해 시작하세요</p>
             </div>
           )}
 

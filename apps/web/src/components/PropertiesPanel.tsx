@@ -536,14 +536,9 @@ export default function PropertiesPanel() {
   }
 
   return (
-    <aside className="props-panel" aria-label="속성">
-      <div className="props-header">속성</div>
-      <div className="props-empty">
-        <p>요소를 선택하면 이곳에서<br/>상세 편집할 수 있어요.</p>
-        <p style={{ fontSize: 11, marginTop: 12, lineHeight: 1.6 }}>
-          타임라인이나 미리보기에서<br/>클립·자막·스티커·이미지·오디오를<br/>클릭해 보세요.
-        </p>
-      </div>
+    <aside className="props-panel empty" aria-label="속성">
+      <div className="props-empty-vertical" aria-hidden="true">속성</div>
+      <span className="visually-hidden">요소를 선택하면 속성 편집 패널이 나타납니다.</span>
     </aside>
   );
 }

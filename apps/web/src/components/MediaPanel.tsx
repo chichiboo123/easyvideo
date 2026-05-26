@@ -174,13 +174,13 @@ export default function MediaPanel() {
   // ── Cleanup recording on unmount ─────────────────────────────────────────
   useEffect(() => () => { mediaRecorderRef.current?.stop(); }, []);
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: "media", label: "미디어" },
-    { id: "audio", label: "오디오" },
-    { id: "text", label: "텍스트" },
-    { id: "sticker", label: "스티커" },
-    { id: "image", label: "이미지" },
-    { id: "markers", label: "마커" },
+  const tabs: { id: Tab; label: string; icon: string }[] = [
+    { id: "media",   label: "미디어",  icon: "🎬" },
+    { id: "audio",   label: "오디오",  icon: "🎵" },
+    { id: "text",    label: "텍스트",  icon: "T" },
+    { id: "sticker", label: "스티커",  icon: "✦" },
+    { id: "image",   label: "이미지",  icon: "🖼" },
+    { id: "markers", label: "마커",    icon: "📍" },
   ];
 
   return (
@@ -194,8 +194,10 @@ export default function MediaPanel() {
             onClick={() => setTab(t.id)}
             aria-selected={tab === t.id}
             aria-controls={`tabpanel-${t.id}`}
+            title={t.label}
           >
-            {t.label}
+            <span className="panel-tab-icon" aria-hidden="true">{t.icon}</span>
+            <span className="panel-tab-label">{t.label}</span>
           </button>
         ))}
       </div>
@@ -209,23 +211,18 @@ export default function MediaPanel() {
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
               onDrop={(e) => { e.preventDefault(); setDragOver(false); handleVideoFiles(e.dataTransfer.files); }}
-              aria-label="영상 드롭 영역"
+              onClick={() => inputRef.current?.click()}
+              role="button"
+              tabIndex={0}
+              aria-label="영상 드롭 영역 — 클릭하거나 영상 파일을 드래그하세요"
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") inputRef.current?.click(); }}
             >
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ margin: "0 auto", display: "block", opacity: 0.4 }} aria-hidden="true">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3" style={{ margin: "0 auto", display: "block", opacity: 0.35 }} aria-hidden="true">
                 <rect x="2" y="3" width="20" height="14" rx="2"/>
                 <path d="M10 8l6 4-6 4V8z"/>
               </svg>
-              <p>영상을 여기에 드래그하거나</p>
-              <button type="button" className="btn-upload"
-                onClick={() => inputRef.current?.click()}
-                aria-label="영상 파일 선택"
-                title="mp4, mov, webm 파일을 불러옵니다"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                  <path d="M12 5v14M5 12l7-7 7 7"/>
-                </svg>
-                파일 열기
-              </button>
+              <p>영상을 끌어다 놓거나 클릭</p>
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>mp4 · mov · webm</span>
               <input ref={inputRef} type="file"
                 accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
                 multiple style={{ display: "none" }}
