@@ -105,7 +105,7 @@ export default function Toolbar({ onExport, onShowShortcuts }: ToolbarProps) {
     { label: "프로젝트 불러오기", icon: "📂", onClick: () => fileInputRef.current?.click() },
     { label: "프로젝트 저장", icon: "💾", onClick: () => { downloadProjectFile(useEditorStore.getState()); toast({ message: "프로젝트 JSON 저장", type: "success" }); } },
     { divider: true },
-    { label: "단축키 도움말", icon: "⌨", shortcut: "?", onClick: onShowShortcuts },
+    { label: "도움말", icon: "⌨", shortcut: "?", onClick: onShowShortcuts },
   ];
 
   return (
@@ -201,7 +201,7 @@ export default function Toolbar({ onExport, onShowShortcuts }: ToolbarProps) {
 
       <button type="button" className="tb-icon-btn"
         onClick={onShowShortcuts}
-        title="단축키 도움말 (?)" aria-label="도움말"
+        title="도움말 — 단축키 · 전환 효과 · 오픈소스 (?)" aria-label="도움말"
       >{Icon.help}</button>
 
       <button type="button" className="btn-export"
