@@ -212,6 +212,36 @@ export default function ProPreviewPanel() {
     else stage.requestFullscreen?.();
   }
 
+  // Transition feedback during preview
+  const transitionType = useEditorStore((s) => s.transitionType);
+  const transitionDuration = useEditorStore((s) => s.transitionDuration);
+
+  const transitionState = useMemo(() => {
+    if (transitionType === "none" || videoClips.length < 2) return null;
+    // Distance (sec) from the nearest *inner* clip boundary
+    let nearestDelta = Infinity;
+    let nextClipName: string | null = null;
+    let acc = 0;
+    for (let i = 0; i < videoClips.length - 1; i++) {
+      acc += videoClips[i].duration;
+      const delta = currentTime - acc; // <0 before boundary, >0 after
+      if (Math.abs(delta) < Math.abs(nearestDelta)) {
+        nearestDelta = delta;
+        nextClipName = videoClips[i + 1]?.name ?? null;
+      }
+    }
+    const half = transitionDuration / 2;
+    if (Math.abs(nearestDelta) > half) return null;
+    // Bell curve: peak at boundary
+    const intensity = 1 - Math.abs(nearestDelta) / half;
+    return { intensity, type: transitionType, nextClipName, isAfter: nearestDelta >= 0 };
+  }, [transitionType, transitionDuration, currentTime, videoClips]);
+
+  const transitionLabel = transitionType === "fade" ? "페이드"
+    : transitionType === "dissolve" ? "디졸브"
+    : transitionType === "slide-left" ? "슬라이드"
+    : transitionType === "wipe-up" ? "와이프" : "";
+
   // CSS filter for the active video effect (so preview matches export)
   const videoEffect = useEditorStore((s) => s.videoEffect);
   const previewVideoFilter = useMemo(() => {
@@ -255,6 +285,20 @@ export default function ProPreviewPanel() {
 
           {videoEffect === "vignette" && activeClip && (
             <div className="overlay-vignette" aria-hidden="true" />
+          )}
+
+          {/* Transition preview overlay (visual cue at clip boundaries) */}
+          {transitionState && activeClip && (
+            <>
+              <div
+                className={`transition-overlay transition-${transitionState.type}`}
+                style={{ opacity: transitionState.intensity }}
+                aria-hidden="true"
+              />
+              <div className="transition-label" aria-live="polite">
+                전환: {transitionLabel}
+              </div>
+            </>
           )}
 
           {/* Captions */}

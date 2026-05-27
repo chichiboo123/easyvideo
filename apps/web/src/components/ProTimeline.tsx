@@ -162,15 +162,20 @@ export default function ProTimeline() {
         <select value={transitionType}
           onChange={(e) => setTransitionType(e.target.value as any)}
           className="tl-select"
-          aria-label="전환"
-          title="장면 전환 효과"
+          aria-label="장면 사이 전환 효과"
+          title="이어진 클립 사이(앞 클립의 끝 ↔ 뒤 클립의 시작)에 적용됩니다"
         >
-          <option value="none">전환 없음</option>
-          <option value="fade">전환: 페이드</option>
-          <option value="dissolve">전환: 디졸브</option>
-          <option value="slide-left">전환: 슬라이드</option>
-          <option value="wipe-up">전환: 와이프</option>
+          <option value="none">장면 전환: 없음</option>
+          <option value="fade">장면 전환: 페이드</option>
+          <option value="dissolve">장면 전환: 디졸브</option>
+          <option value="slide-left">장면 전환: 슬라이드</option>
+          <option value="wipe-up">장면 전환: 와이프</option>
         </select>
+        {transitionType !== "none" && videoClips.length > 1 && (
+          <span className="tl-hint" aria-hidden="true" title="앞 클립 끝과 뒤 클립 시작 사이에 적용됩니다">
+            ⓘ 클립 사이 적용
+          </span>
+        )}
         <select value={videoEffect}
           onChange={(e) => setVideoEffect(e.target.value as any)}
           className="tl-select"
@@ -335,6 +340,25 @@ export default function ProTimeline() {
                         }} />
                       </>
                     )}
+                  </div>
+                );
+              })}
+              {/* Transition badges between adjacent clips */}
+              {transitionType !== "none" && videoClips.slice(0, -1).map((clip, idx) => {
+                const boundary = (clipOffsets[idx] + clip.duration) * pxPerSec;
+                const label = transitionType === "fade" ? "페이드"
+                  : transitionType === "dissolve" ? "디졸브"
+                  : transitionType === "slide-left" ? "슬라이드"
+                  : "와이프";
+                return (
+                  <div key={`tr-${clip.id}`} className="transition-badge"
+                    style={{ left: boundary }}
+                    title={`장면 전환: ${label} (${transitionDuration.toFixed(1)}초) — ${clip.name} → ${videoClips[idx + 1]?.name ?? ""}`}
+                    aria-label={`장면 전환 ${label}`}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                      <path d="M7 7l-4 5 4 5M17 7l4 5-4 5"/>
+                    </svg>
                   </div>
                 );
               })}

@@ -12,6 +12,7 @@ import ProTimeline from "./ProTimeline";
 import ExportModal from "./ExportModal";
 import ShortcutsModal from "./ShortcutsModal";
 import ToastContainer from "./ToastContainer";
+import Footer from "./Footer";
 
 export default function EasyVideoEditor() {
   const [showExport, setShowExport] = useState(false);
@@ -177,12 +178,15 @@ export default function EasyVideoEditor() {
 
   return (
     <>
-      <div className="app">
-        <Toolbar onExport={() => setShowExport(true)} onShowShortcuts={() => setShowShortcuts(true)} />
-        <MediaPanel />
-        <ProPreviewPanel />
-        <PropertiesPanel />
-        <ProTimeline />
+      <div className="app-shell">
+        <div className="app">
+          <Toolbar onExport={() => setShowExport(true)} onShowShortcuts={() => setShowShortcuts(true)} />
+          <MediaPanel />
+          <ProPreviewPanel />
+          <PropertiesPanel />
+          <ProTimeline />
+        </div>
+        <Footer />
       </div>
 
       {showExport && <ExportModal onClose={() => setShowExport(false)} />}
