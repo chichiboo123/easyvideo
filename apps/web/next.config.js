@@ -1,13 +1,20 @@
 /** @type {import('next').NextConfig} */
-const isProd = process.env.NODE_ENV === "production";
-const repoName = "easyvideo";
+const normalizeBasePath = (value) => {
+  if (!value) return "";
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!trimmed || trimmed === "/") return "";
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+};
+
+const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH);
 
 const nextConfig = {
   reactStrictMode: true,
   output: "export",
-  // GitHub Pages deploys under /easyvideo/ when using a project (non-root) page.
-  basePath: isProd ? `/${repoName}` : "",
-  assetPrefix: isProd ? `/${repoName}/` : "",
+  // Deploys normally at the domain root. Set NEXT_PUBLIC_BASE_PATH=/easyvideo
+  // only when publishing under a project subdirectory such as GitHub Pages.
+  basePath,
+  assetPrefix: basePath ? `${basePath}/` : "",
   images: { unoptimized: true },
   // Custom headers are not applied in static export mode.
   // Cross-origin isolation is handled by coi-serviceworker.js in public/.

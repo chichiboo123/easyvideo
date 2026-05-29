@@ -41,39 +41,41 @@ if (typeof window === "undefined") {
 
 /* ── Page context: register this file as a Service Worker ───────────────── */
 } else {
-  // Already cross-origin isolated — nothing to do.
-  if (self.crossOriginIsolated) return;
+  (() => {
+    // Already cross-origin isolated — nothing to do.
+    if (self.crossOriginIsolated) return;
 
-  if (!("serviceWorker" in navigator)) {
-    console.warn("[coi-sw] Service Workers not supported. FFmpeg.wasm may fail.");
-    return;
-  }
+    if (!("serviceWorker" in navigator)) {
+      console.warn("[coi-sw] Service Workers not supported. FFmpeg.wasm may fail.");
+      return;
+    }
 
-  // Derive path relative to current base so it works under any basePath.
-  const swPath =
-    document.currentScript
-      ? document.currentScript.src
-      : location.origin + "/coi-serviceworker.js";
+    // Derive path relative to current base so it works under any basePath.
+    const swPath =
+      document.currentScript
+        ? document.currentScript.src
+        : location.origin + "/coi-serviceworker.js";
 
-  // Scope must be at or below the SW script path (e.g. /easyvideo/ on GitHub Pages).
-  const scope = swPath.replace(/[^/]+$/, "");
-  navigator.serviceWorker
-    .register(swPath, { scope })
-    .then((reg) => {
-      function reload() {
-        if (!sessionStorage.getItem("coi-reload")) {
-          sessionStorage.setItem("coi-reload", "1");
-          location.reload();
+    // Scope must be at or below the SW script path (e.g. /easyvideo/ on GitHub Pages).
+    const scope = swPath.replace(/[^/]+$/, "");
+    navigator.serviceWorker
+      .register(swPath, { scope })
+      .then((reg) => {
+        function reload() {
+          if (!sessionStorage.getItem("coi-reload")) {
+            sessionStorage.setItem("coi-reload", "1");
+            location.reload();
+          }
         }
-      }
-      const sw = reg.installing || reg.waiting;
-      if (sw) {
-        sw.addEventListener("statechange", function () {
-          if (this.state === "activated") reload();
-        });
-      } else if (reg.active) {
-        reload();
-      }
-    })
-    .catch((err) => console.warn("[coi-sw] Registration failed:", err));
+        const sw = reg.installing || reg.waiting;
+        if (sw) {
+          sw.addEventListener("statechange", function () {
+            if (this.state === "activated") reload();
+          });
+        } else if (reg.active) {
+          reload();
+        }
+      })
+      .catch((err) => console.warn("[coi-sw] Registration failed:", err));
+  })();
 }
