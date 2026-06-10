@@ -908,7 +908,7 @@ button, select, input, textarea {
   min-height: 100%;
 }
 
-/* Ruler */
+/* Ruler (clickable: jump the playhead to the clicked time) */
 .ruler {
   height: 24px;
   background: var(--ruler-bg);
@@ -916,7 +916,7 @@ button, select, input, textarea {
   position: sticky;
   top: 0;
   z-index: 20;
-  pointer-events: none;
+  cursor: pointer;
 }
 .ruler-left-pad {
   position: sticky;
@@ -1434,6 +1434,8 @@ button, select, input, textarea {
   height: 18px;
   margin-left: -9px;
   margin-top: -9px;
+  padding: 0;
+  border: none;
   border-radius: 50%;
   background: var(--accent);
   color: #fff;
@@ -1443,8 +1445,96 @@ button, select, input, textarea {
   z-index: 5;
   box-shadow: 0 0 0 2px var(--bg-app), 0 2px 6px rgba(0,0,0,0.5);
   pointer-events: auto;
-  cursor: help;
+  cursor: pointer;
+  transition: transform 0.1s;
 }
+.transition-badge:hover { transform: scale(1.25); }
+.transition-badge.is-cut {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  box-shadow: 0 0 0 1px var(--border-light), 0 2px 6px rgba(0,0,0,0.4);
+}
+.transition-badge.is-custom { box-shadow: 0 0 0 2px #fbbf24, 0 2px 6px rgba(0,0,0,0.5); }
+
+/* Per-boundary transition picker */
+.transition-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 998;
+}
+.transition-popover {
+  position: absolute;
+  top: 46px;
+  width: 200px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.6);
+  padding: 8px;
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: dropdown-in 100ms ease-out;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-light) transparent;
+}
+.transition-popover-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 2px 4px 4px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.transition-popover-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.transition-popover-item {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.1s, color 0.1s;
+}
+.transition-popover-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.transition-popover-item.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ── Purpose-based caption preset groups ────────────────────────────── */
+.preset-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.preset-group { display: flex; flex-direction: column; gap: 5px; }
+.preset-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+
+/* audio source links share the preset row look */
+a.audio-preset { text-decoration: none; color: inherit; }
 
 /* ── Preview: transition overlay + label ────────────────────────────── */
 .transition-overlay {

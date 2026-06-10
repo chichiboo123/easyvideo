@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useEditorStore } from "@/store/editorStore";
-import { useToastStore } from "@/lib/notifications";
-import { localAutosave } from "@/lib/project";
+import { toast } from "@/lib/notifications";
+import { localAutosave, readAutosave } from "@/lib/project";
 import Toolbar from "./Toolbar";
 import MediaPanel from "./MediaPanel";
 import ProPreviewPanel from "./ProPreviewPanel";
@@ -80,6 +80,41 @@ export default function EasyVideoEditor() {
     return () => unsub();
   }, []);
 
+  // ── Offer to restore the previous session ─────────────────────────────────
+  // Blob URLs don't survive a reload, so we restore captions / stickers /
+  // markers / project settings and ask the user to re-add media files.
+  useEffect(() => {
+    const saved = readAutosave() as { project?: Record<string, any> } | null;
+    const p = saved?.project;
+    if (!p) return;
+    const hasContent =
+      (p.captions?.length ?? 0) > 0 ||
+      (p.stickers?.length ?? 0) > 0 ||
+      (p.markers?.length ?? 0) > 0;
+    if (!hasContent) return;
+    if (useEditorStore.getState().videoClips.length > 0) return;
+    toast({
+      message: "이전에 작업하던 자막·스티커·설정이 남아 있어요",
+      type: "info",
+      duration: 10000,
+      action: {
+        label: "복원",
+        run: () => {
+          useEditorStore.getState().hydrateFromJSON({
+            project: {
+              ...p,
+              // Media blobs are gone after a reload — drop the dead entries.
+              videoClips: [],
+              images: [],
+              audioClips: Array.isArray(p.audioClips) ? p.audioClips.filter((a: any) => a.url) : [],
+            },
+          });
+          toast({ message: "복원 완료! 영상 파일만 다시 불러와 주세요.", type: "success" });
+        },
+      },
+    });
+  }, []);
+
   // ── Global keyboard shortcuts ──────────────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -127,6 +162,13 @@ export default function EasyVideoEditor() {
         case "ArrowRight":
           if (!isFormField) { e.preventDefault(); seekRelative(e.shiftKey ? 5 : 1); }
           break;
+        case ",":
+          // Frame-by-frame nudge (1/30s) for precise cut points.
+          if (!isFormField) { e.preventDefault(); seekRelative(-1 / 30); }
+          break;
+        case ".":
+          if (!isFormField) { e.preventDefault(); seekRelative(1 / 30); }
+          break;
         case "s": case "S":
           if (!isFormField && !isModifier && !isVideoTrackLocked) {
             e.preventDefault(); splitClipAtPlayhead();
@@ -144,13 +186,19 @@ export default function EasyVideoEditor() {
             else document.querySelector(".preview-stage")?.requestFullscreen?.();
           }
           break;
-        case "Delete": case "Backspace":
+        case "Delete": case "Backspace": {
           if (isFormField) return;
-          if (selectedClipId && !isVideoTrackLocked) removeVideoClip(selectedClipId);
-          if (selectedCaptionId) removeCaption(selectedCaptionId);
-          if (selectedStickerId) removeSticker(selectedStickerId);
-          if (selectedImageId) removeImage(selectedImageId);
+          let deleted: string | null = null;
+          if (selectedClipId && !isVideoTrackLocked) { removeVideoClip(selectedClipId); deleted = "클립"; }
+          if (selectedCaptionId) { removeCaption(selectedCaptionId); deleted = "자막"; }
+          if (selectedStickerId) { removeSticker(selectedStickerId); deleted = "스티커"; }
+          if (selectedImageId) { removeImage(selectedImageId); deleted = "이미지"; }
+          if (deleted) {
+            toast({ message: `${deleted}을(를) 삭제했어요`, type: "info",
+              action: { label: "되돌리기", run: () => useEditorStore.getState().undo() } });
+          }
           break;
+        }
         case "+": case "=":
           if (!isFormField) setTimelineZoom(timelineZoom + 20);
           break;

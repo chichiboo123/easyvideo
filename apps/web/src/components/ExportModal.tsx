@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useEditorStore } from "@/store/editorStore";
-import { exportVideo } from "@/lib/ffmpeg";
+import { exportVideo, cancelExport } from "@/lib/ffmpeg";
 import type { ExportQuality } from "@/types";
 
 interface ExportModalProps {
@@ -14,6 +14,7 @@ export default function ExportModal({ onClose }: ExportModalProps) {
   const audioClips = useEditorStore((s) => s.audioClips);
   const captions = useEditorStore((s) => s.captions);
   const stickers = useEditorStore((s) => s.stickers);
+  const images = useEditorStore((s) => s.images);
   const isAudioMuted = useEditorStore((s) => s.isAudioMuted);
   const transitionType = useEditorStore((s) => s.transitionType);
   const transitionDuration = useEditorStore((s) => s.transitionDuration);
@@ -35,7 +36,7 @@ export default function ExportModal({ onClose }: ExportModalProps) {
       const blob = await exportVideo({
         clips: videoClips,
         audios: audioClips,
-        captions, stickers,
+        captions, stickers, images,
         isAudioMuted,
         transitionType, transitionDuration,
         videoEffect, aspectRatio,
@@ -69,6 +70,12 @@ export default function ExportModal({ onClose }: ExportModalProps) {
     onClose();
   }
 
+  function handleCancelExport() {
+    // Kill the wasm worker so CPU is freed immediately; next export reloads.
+    cancelExport();
+    handleClose();
+  }
+
   return (
     <div className="export-overlay" role="dialog" aria-modal="true" aria-label="영상 내보내기"
       onClick={(e) => { if (e.target === e.currentTarget && phase !== "loading") handleClose(); }}
@@ -81,9 +88,11 @@ export default function ExportModal({ onClose }: ExportModalProps) {
             <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
               <p>클립 수: <strong style={{ color: "var(--text-primary)" }}>{videoClips.length}개</strong></p>
               <p>오디오: <strong style={{ color: "var(--text-primary)" }}>{audioClips.length}개</strong></p>
-              <p>자막: <strong style={{ color: "var(--text-primary)" }}>{captions.length}개</strong></p>
-              <p>스티커: <strong style={{ color: "var(--text-primary)" }}>{stickers.length}개</strong></p>
+              <p>자막: <strong style={{ color: "var(--text-primary)" }}>{captions.length}개</strong> · 스티커: <strong style={{ color: "var(--text-primary)" }}>{stickers.length}개</strong> · 이미지: <strong style={{ color: "var(--text-primary)" }}>{images.length}개</strong></p>
               <p>종횡비: <strong style={{ color: "var(--text-primary)" }}>{aspectRatio}</strong></p>
+              <p style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                자막·스티커·이미지는 미리보기와 동일한 폰트/스타일로 영상에 구워져요.
+              </p>
             </div>
 
             <div className="props-section-title-btn" style={{ pointerEvents: "none" }}>해상도</div>
@@ -120,7 +129,7 @@ export default function ExportModal({ onClose }: ExportModalProps) {
             <div className="export-log">{log}</div>
             <p style={{ fontSize: 11, color: "var(--text-muted)" }}>창을 닫지 말고 잠시만 기다려 주세요.</p>
             <div className="export-action-row">
-              <button type="button" className="btn-cancel" onClick={handleClose}>취소</button>
+              <button type="button" className="btn-cancel" onClick={handleCancelExport}>내보내기 중단</button>
             </div>
           </>
         )}

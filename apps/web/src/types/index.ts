@@ -16,6 +16,10 @@ export interface VideoClip {
   volume: number;          // 0 ~ 2 (0 = mute)
   fadeIn: number;          // sec
   fadeOut: number;         // sec
+
+  // Transition between this clip and the NEXT one.
+  // undefined/null = follow the global default transition.
+  transitionAfter?: TransitionType | null;
 }
 
 export interface AudioClip {
@@ -35,7 +39,8 @@ export type CaptionAnimation =
   | "none" | "fade"
   | "slide-up" | "slide-down" | "slide-left" | "slide-right"
   | "zoom-in" | "zoom-out"
-  | "bounce" | "pop" | "typewriter";
+  | "bounce" | "pop" | "typewriter"
+  | "shake" | "blink";
 
 export type CaptionAlign = "left" | "center" | "right";
 
@@ -120,7 +125,16 @@ export interface Marker {
 }
 
 export type EditorStep = 1 | 2 | 3;
-export type TransitionType = "none" | "fade" | "dissolve" | "slide-left" | "wipe-up";
+
+// All transitions are backed by FFmpeg's xfade filter so the preview and
+// the exported file stay in sync. "none" is a hard cut.
+export type TransitionType =
+  | "none"
+  | "fade" | "fadeblack" | "fadewhite" | "dissolve"
+  | "slide-left" | "slide-right" | "slide-up" | "slide-down"
+  | "wipe-left" | "wipe-right" | "wipe-up" | "wipe-down"
+  | "circleopen" | "circleclose" | "radial"
+  | "smoothleft" | "pixelize" | "zoomin";
 export type VideoEffectType =
   | "none" | "vintage" | "bright" | "bw"
   | "warm" | "cool" | "blur" | "vignette";

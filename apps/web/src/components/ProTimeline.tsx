@@ -1,12 +1,21 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useEditorStore } from "@/store/editorStore";
+import { TRANSITIONS, TRANSITION_GROUPS, transitionLabel, resolveTransition } from "@/lib/transitions";
+import type { TransitionType } from "@/types";
 
 function formatTime(sec: number) {
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function formatRulerTime(sec: number, interval: number) {
+  if (interval >= 1) return formatTime(sec);
+  const m = Math.floor(sec / 60);
+  const s = (sec % 60).toFixed(interval >= 0.5 ? 1 : 2).padStart(interval >= 0.5 ? 4 : 5, "0");
+  return `${m}:${s}`;
 }
 
 function getRulerInterval(pxPerSec: number): number {
@@ -56,8 +65,8 @@ export default function ProTimeline() {
   const updateCaption = useEditorStore((s) => s.updateCaption);
   const updateImage = useEditorStore((s) => s.updateImage);
   const updateSticker = useEditorStore((s) => s.updateSticker);
-  const trimClipInPoint = useEditorStore((s) => s.trimClipInPoint);
-  const trimClipOutPoint = useEditorStore((s) => s.trimClipOutPoint);
+  const updateVideoClip = useEditorStore((s) => s.updateVideoClip);
+  const updateAudioClip = useEditorStore((s) => s.updateAudioClip);
   const splitClipAtPlayhead = useEditorStore((s) => s.splitClipAtPlayhead);
   const setTimelineZoom = useEditorStore((s) => s.setTimelineZoom);
   const setActiveClipIndex = useEditorStore((s) => s.setActiveClipIndex);
@@ -68,6 +77,9 @@ export default function ProTimeline() {
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const dragSrcIdx = useRef<number | null>(null);
+
+  // Per-boundary transition picker (badge between clip i and i+1).
+  const [openBoundary, setOpenBoundary] = useState<number | null>(null);
 
   const pxPerSec = timelineZoom;
   const total = totalDuration();
@@ -87,11 +99,12 @@ export default function ProTimeline() {
     return Array.from(new Set(set)).sort((a, b) => a - b);
   }, [clipOffsets, videoClips, markers, currentTime]);
 
-  function applySnap(t: number): number {
+  function applySnap(t: number, exclude?: number): number {
     if (!snapEnabled) return t;
     const tolerance = SNAP_PX / pxPerSec;
     let best = t, bestDelta = tolerance;
     for (const target of snapTargets) {
+      if (exclude !== undefined && Math.abs(target - exclude) < 0.001) continue;
       const d = Math.abs(target - t);
       if (d < bestDelta) { best = target; bestDelta = d; }
     }
@@ -102,20 +115,24 @@ export default function ProTimeline() {
   const markCount = Math.ceil((contentW - TRACK_HEADER_W) / pxPerSec / interval) + 2;
   const rulerMarks = Array.from({ length: markCount }, (_, i) => i * interval);
 
-  function handleTrackClick(e: React.MouseEvent<HTMLDivElement>) {
+  // Convert a mouse position to timeline seconds (scroll-safe: always
+  // measured against the scroll container, not the scrolled content).
+  function clientXToTime(clientX: number): number | null {
     const body = bodyRef.current;
-    if (!body) return;
-    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-    const x = e.clientX - rect.left - TRACK_HEADER_W + body.scrollLeft;
-    if (x < 0) return;
-    const t = Math.max(0, Math.min(total, x / pxPerSec));
+    if (!body) return null;
+    const rect = body.getBoundingClientRect();
+    const x = clientX - rect.left + body.scrollLeft - TRACK_HEADER_W;
+    if (x < 0) return null;
+    return Math.max(0, Math.min(total, x / pxPerSec));
+  }
+
+  function handleTrackClick(e: React.MouseEvent<HTMLDivElement>) {
+    if ((e.target as HTMLElement).closest(".track-header, .ruler-left-pad")) return;
+    const t = clientXToTime(e.clientX);
+    if (t === null) return;
     seekToGlobal(applySnap(t));
   }
-  function seekByClientX(clientX: number, rect: DOMRect, scrollLeft: number) {
-    const x = clientX - rect.left - TRACK_HEADER_W + scrollLeft;
-    const t = Math.max(0, Math.min(total, x / pxPerSec));
-    seekToGlobal(applySnap(t));
-  }
+
   function seekToGlobal(t: number) {
     if (isPlaying) setPlaying(false);
     let elapsed = 0;
@@ -160,22 +177,31 @@ export default function ProTimeline() {
         <span className="tl-divider" aria-hidden="true" />
 
         <select value={transitionType}
-          onChange={(e) => setTransitionType(e.target.value as any)}
+          onChange={(e) => setTransitionType(e.target.value as TransitionType)}
           className="tl-select"
-          aria-label="장면 사이 전환 효과"
-          title="이어진 클립 사이(앞 클립의 끝 ↔ 뒤 클립의 시작)에 적용됩니다"
+          aria-label="기본 장면 전환 효과"
+          title="모든 클립 사이에 적용되는 기본 전환입니다. 타임라인의 ◇ 배지를 클릭하면 구간별로 다르게 바꿀 수 있어요."
         >
-          <option value="none">장면 전환: 없음</option>
-          <option value="fade">장면 전환: 페이드</option>
-          <option value="dissolve">장면 전환: 디졸브</option>
-          <option value="slide-left">장면 전환: 슬라이드</option>
-          <option value="wipe-up">장면 전환: 와이프</option>
+          {TRANSITION_GROUPS.map((g) => (
+            <optgroup key={g} label={g}>
+              {TRANSITIONS.filter((t) => t.group === g).map((t) => (
+                <option key={t.value} value={t.value}>전환: {t.label}</option>
+              ))}
+            </optgroup>
+          ))}
         </select>
-        {transitionType !== "none" && videoClips.length > 1 && (
-          <span className="tl-hint" aria-hidden="true" title="앞 클립 끝과 뒤 클립 시작 사이에 적용됩니다">
-            ⓘ 클립 사이 적용
-          </span>
-        )}
+        <select
+          value={transitionDuration}
+          onChange={(e) => setTransitionDuration(Number(e.target.value))}
+          className="tl-select"
+          style={{ maxWidth: 76 }}
+          aria-label="전환 길이"
+          title="전환 효과 길이 (초)"
+        >
+          {[0.2, 0.3, 0.4, 0.6, 0.8, 1.0, 1.5, 2.0].map((d) => (
+            <option key={d} value={d}>{d.toFixed(1)}초</option>
+          ))}
+        </select>
         <select value={videoEffect}
           onChange={(e) => setVideoEffect(e.target.value as any)}
           className="tl-select"
@@ -240,7 +266,7 @@ export default function ProTimeline() {
             <div className="ruler-marks" style={{ width: contentW - TRACK_HEADER_W }}>
               {rulerMarks.map((t) => (
                 <div key={t} className="ruler-mark" style={{ left: t * pxPerSec }}>
-                  <span className="ruler-mark-label">{formatTime(t)}</span>
+                  <span className="ruler-mark-label">{formatRulerTime(t, interval)}</span>
                   <div className="ruler-mark-line" />
                 </div>
               ))}
@@ -248,7 +274,7 @@ export default function ProTimeline() {
               {markers.map((m) => (
                 <div key={m.id} className="ruler-marker" style={{ left: m.time * pxPerSec }}
                   title={`${m.label} (${formatTime(m.time)})`}
-                  onClick={(e) => { e.stopPropagation(); setCurrentTime(m.time); setSeekRequest(m.time); }}
+                  onClick={(e) => { e.stopPropagation(); seekToGlobal(m.time); }}
                   onDoubleClick={(e) => { e.stopPropagation(); removeMarker(m.id); }}
                 >
                   <span className="ruler-marker-pin" style={{ background: m.color }} />
@@ -261,10 +287,10 @@ export default function ProTimeline() {
           {/* Playhead */}
           <div className="playhead" style={{ left: playheadX }}
             onMouseDown={(e) => {
-              const body = bodyRef.current;
-              if (!body) return;
-              const rect = body.getBoundingClientRect();
-              const onMove = (ev: MouseEvent) => seekByClientX(ev.clientX, rect, body.scrollLeft);
+              const onMove = (ev: MouseEvent) => {
+                const t = clientXToTime(ev.clientX);
+                if (t !== null) seekToGlobal(applySnap(t));
+              };
               const onUp = () => {
                 window.removeEventListener("mousemove", onMove);
                 window.removeEventListener("mouseup", onUp);
@@ -288,8 +314,7 @@ export default function ProTimeline() {
               V1
             </div>
             <div className="track-body">
-              {videoClips.map((clip) => {
-                const idx = videoClips.findIndex((x) => x.id === clip.id);
+              {videoClips.map((clip, idx) => {
                 const left = clipOffsets[idx] * pxPerSec;
                 const width = Math.max(clip.duration * pxPerSec - 2, 20);
                 return (
@@ -319,9 +344,11 @@ export default function ProTimeline() {
                         <span className="clip-edge-handle left" onMouseDown={(e) => {
                           e.preventDefault(); e.stopPropagation();
                           const startX = e.clientX;
+                          const origIn = clip.inPoint;
                           const onMove = (ev: MouseEvent) => {
                             const delta = (ev.clientX - startX) / pxPerSec;
-                            trimClipInPoint(clip.id, delta);
+                            const newIn = Math.max(0, Math.min(clip.outPoint - 0.2, origIn + delta));
+                            updateVideoClip(clip.id, { inPoint: newIn, duration: clip.outPoint - newIn });
                           };
                           const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
                           window.addEventListener("mousemove", onMove);
@@ -330,9 +357,12 @@ export default function ProTimeline() {
                         <span className="clip-edge-handle right" onMouseDown={(e) => {
                           e.preventDefault(); e.stopPropagation();
                           const startX = e.clientX;
+                          const origOut = clip.outPoint;
+                          const maxOut = clip.sourceDuration ?? Number.POSITIVE_INFINITY;
                           const onMove = (ev: MouseEvent) => {
                             const delta = (ev.clientX - startX) / pxPerSec;
-                            trimClipOutPoint(clip.id, delta);
+                            const newOut = Math.max(clip.inPoint + 0.2, Math.min(maxOut, origOut + delta));
+                            updateVideoClip(clip.id, { outPoint: newOut, duration: newOut - clip.inPoint });
                           };
                           const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
                           window.addEventListener("mousemove", onMove);
@@ -343,22 +373,57 @@ export default function ProTimeline() {
                   </div>
                 );
               })}
-              {/* Transition badges between adjacent clips */}
-              {transitionType !== "none" && videoClips.slice(0, -1).map((clip, idx) => {
+
+              {/* Transition badges between adjacent clips (click to change per boundary) */}
+              {videoClips.slice(0, -1).map((clip, idx) => {
                 const boundary = (clipOffsets[idx] + clip.duration) * pxPerSec;
-                const label = transitionType === "fade" ? "페이드"
-                  : transitionType === "dissolve" ? "디졸브"
-                  : transitionType === "slide-left" ? "슬라이드"
-                  : "와이프";
+                const resolved = resolveTransition(clip.transitionAfter, transitionType);
+                const isCut = resolved === "none";
                 return (
-                  <div key={`tr-${clip.id}`} className="transition-badge"
-                    style={{ left: boundary }}
-                    title={`장면 전환: ${label} (${transitionDuration.toFixed(1)}초) — ${clip.name} → ${videoClips[idx + 1]?.name ?? ""}`}
-                    aria-label={`장면 전환 ${label}`}
-                  >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-                      <path d="M7 7l-4 5 4 5M17 7l4 5-4 5"/>
-                    </svg>
+                  <div key={`tr-${clip.id}`}>
+                    <button type="button"
+                      className={`transition-badge ${isCut ? "is-cut" : ""} ${clip.transitionAfter != null ? "is-custom" : ""}`}
+                      style={{ left: boundary }}
+                      onClick={(e) => { e.stopPropagation(); setOpenBoundary(openBoundary === idx ? null : idx); }}
+                      title={`장면 전환: ${transitionLabel(resolved)}${clip.transitionAfter != null ? " (이 구간만)" : " (기본값)"} — 클릭해서 변경`}
+                      aria-label={`${clip.name} 다음 장면 전환 ${transitionLabel(resolved)} 변경`}
+                    >
+                      {isCut ? (
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                          <path d="M12 5v14"/>
+                        </svg>
+                      ) : (
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                          <path d="M7 7l-4 5 4 5M17 7l4 5-4 5"/>
+                        </svg>
+                      )}
+                    </button>
+                    {openBoundary === idx && (
+                      <>
+                        <div className="transition-popover-backdrop" onClick={(e) => { e.stopPropagation(); setOpenBoundary(null); }} />
+                        <div className="transition-popover" style={{ left: Math.max(0, boundary - 90) }} onClick={(e) => e.stopPropagation()}>
+                          <div className="transition-popover-title">
+                            {clip.name} → {videoClips[idx + 1]?.name}
+                          </div>
+                          <button type="button"
+                            className={`transition-popover-item ${clip.transitionAfter == null ? "active" : ""}`}
+                            onClick={() => { updateVideoClip(clip.id, { transitionAfter: null }); setOpenBoundary(null); }}
+                          >
+                            ★ 기본값 따르기 ({transitionLabel(transitionType)})
+                          </button>
+                          <div className="transition-popover-grid">
+                            {TRANSITIONS.map((t) => (
+                              <button key={t.value} type="button"
+                                className={`transition-popover-item ${clip.transitionAfter === t.value ? "active" : ""}`}
+                                onClick={() => { updateVideoClip(clip.id, { transitionAfter: t.value }); setOpenBoundary(null); }}
+                              >
+                                {t.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 );
               })}
@@ -383,10 +448,30 @@ export default function ProTimeline() {
                       className={`clip-block clip-audio ${selectedAudioId === a.id ? "selected" : ""}`}
                       style={{ left, width }}
                       onClick={(e) => { e.stopPropagation(); selectAudio(a.id); }}
+                      onMouseDown={(e) => {
+                        // Drag horizontally to place the audio on the timeline.
+                        if ((e.target as HTMLElement).closest(".clip-edge-handle")) return;
+                        const startX = e.clientX;
+                        const orig = a.startTime ?? 0;
+                        let moved = false;
+                        const onMove = (ev: MouseEvent) => {
+                          const delta = (ev.clientX - startX) / pxPerSec;
+                          if (Math.abs(ev.clientX - startX) > 3) moved = true;
+                          if (!moved) return;
+                          const next = applySnap(Math.max(0, orig + delta), orig);
+                          updateAudioClip(a.id, { startTime: Math.max(0, next) });
+                        };
+                        const onUp = () => {
+                          window.removeEventListener("mousemove", onMove);
+                          window.removeEventListener("mouseup", onUp);
+                        };
+                        window.addEventListener("mousemove", onMove);
+                        window.addEventListener("mouseup", onUp);
+                      }}
                       role="button"
                       tabIndex={0}
                       aria-label={`${a.name} 오디오`}
-                      title={a.name}
+                      title={`${a.name} — 드래그로 시작 위치 이동`}
                     >
                       <span className="clip-label">🎵 {a.name}</span>
                     </div>
@@ -414,11 +499,32 @@ export default function ProTimeline() {
                       className={`clip-block clip-text ${selectedCaptionId === cap.id ? "selected" : ""}`}
                       style={{ left, width }}
                       onClick={(e) => { e.stopPropagation(); selectCaption(cap.id); }}
+                      onMouseDown={(e) => {
+                        // Drag the body to move the whole caption in time.
+                        if ((e.target as HTMLElement).closest(".clip-edge-handle")) return;
+                        const startX = e.clientX;
+                        const origStart = cap.startTime;
+                        const len = cap.endTime - cap.startTime;
+                        let moved = false;
+                        const onMove = (ev: MouseEvent) => {
+                          const delta = (ev.clientX - startX) / pxPerSec;
+                          if (Math.abs(ev.clientX - startX) > 3) moved = true;
+                          if (!moved) return;
+                          const next = Math.max(0, applySnap(origStart + delta, origStart));
+                          updateCaption(cap.id, { startTime: next, endTime: next + len });
+                        };
+                        const onUp = () => {
+                          window.removeEventListener("mousemove", onMove);
+                          window.removeEventListener("mouseup", onUp);
+                        };
+                        window.addEventListener("mousemove", onMove);
+                        window.addEventListener("mouseup", onUp);
+                      }}
                       role="button" tabIndex={0}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") selectCaption(cap.id); }}
                       aria-label={`자막: ${cap.text}`}
                       aria-pressed={selectedCaptionId === cap.id}
-                      title={cap.text}
+                      title={`${cap.text} — 본체 드래그로 이동, 양 끝 드래그로 길이 조절`}
                     >
                       <span className="clip-label">{cap.text}</span>
                       <span className="clip-edge-handle left" onMouseDown={(e) => {
@@ -427,7 +533,7 @@ export default function ProTimeline() {
                         const startTime = cap.startTime;
                         const onMove = (ev: MouseEvent) => {
                           const proposed = startTime + (ev.clientX - startX) / pxPerSec;
-                          const snapped = applySnap(proposed);
+                          const snapped = applySnap(proposed, startTime);
                           const next = Math.max(0, Math.min(cap.endTime - 0.1, snapped));
                           updateCaption(cap.id, { startTime: next });
                         };
@@ -441,7 +547,7 @@ export default function ProTimeline() {
                         const endTime = cap.endTime;
                         const onMove = (ev: MouseEvent) => {
                           const proposed = endTime + (ev.clientX - startX) / pxPerSec;
-                          const snapped = applySnap(proposed);
+                          const snapped = applySnap(proposed, endTime);
                           const next = Math.max(cap.startTime + 0.1, snapped);
                           updateCaption(cap.id, { endTime: next });
                         };
@@ -474,14 +580,14 @@ export default function ProTimeline() {
                       <span className="clip-edge-handle left" onMouseDown={(e) => {
                         e.preventDefault(); e.stopPropagation();
                         const startX = e.clientX; const start = img.startTime;
-                        const onMove = (ev: MouseEvent) => updateImage(img.id, { startTime: Math.max(0, Math.min(img.endTime - 0.1, start + (ev.clientX - startX) / pxPerSec)) });
+                        const onMove = (ev: MouseEvent) => updateImage(img.id, { startTime: Math.max(0, Math.min(img.endTime - 0.1, applySnap(start + (ev.clientX - startX) / pxPerSec, start))) });
                         const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
                         window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
                       }} />
                       <span className="clip-edge-handle right" onMouseDown={(e) => {
                         e.preventDefault(); e.stopPropagation();
                         const startX = e.clientX; const end = img.endTime;
-                        const onMove = (ev: MouseEvent) => updateImage(img.id, { endTime: Math.max(img.startTime + 0.1, end + (ev.clientX - startX) / pxPerSec) });
+                        const onMove = (ev: MouseEvent) => updateImage(img.id, { endTime: Math.max(img.startTime + 0.1, applySnap(end + (ev.clientX - startX) / pxPerSec, end)) });
                         const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
                         window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
                       }} />
@@ -517,14 +623,14 @@ export default function ProTimeline() {
                       <span className="clip-edge-handle left" onMouseDown={(e) => {
                         e.preventDefault(); e.stopPropagation();
                         const startX = e.clientX; const start = st.startTime;
-                        const onMove = (ev: MouseEvent) => updateSticker(st.id, { startTime: Math.max(0, Math.min(st.endTime - 0.1, start + (ev.clientX - startX) / pxPerSec)) });
+                        const onMove = (ev: MouseEvent) => updateSticker(st.id, { startTime: Math.max(0, Math.min(st.endTime - 0.1, applySnap(start + (ev.clientX - startX) / pxPerSec, start))) });
                         const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
                         window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
                       }} />
                       <span className="clip-edge-handle right" onMouseDown={(e) => {
                         e.preventDefault(); e.stopPropagation();
                         const startX = e.clientX; const end = st.endTime;
-                        const onMove = (ev: MouseEvent) => updateSticker(st.id, { endTime: Math.max(st.startTime + 0.1, end + (ev.clientX - startX) / pxPerSec) });
+                        const onMove = (ev: MouseEvent) => updateSticker(st.id, { endTime: Math.max(st.startTime + 0.1, applySnap(end + (ev.clientX - startX) / pxPerSec, end)) });
                         const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
                         window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
                       }} />

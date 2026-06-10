@@ -5,15 +5,15 @@ import { useEditorStore, generateId, defaultVideoClip, defaultCaption } from "@/
 import { saveFile } from "@/lib/storage";
 import { toast } from "@/lib/notifications";
 import { parseSrt, parseVtt, downloadSrt } from "@/lib/srt";
+import { CAPTION_PRESET_GROUPS } from "@/lib/captionPresets";
 
 const ACCEPTED_VIDEO = ["video/mp4", "video/quicktime", "video/webm"];
 
-const PRESET_BGM = [
-  { id: "bgm-1", name: "Chill Beats", emoji: "🎧", duration: 120 },
-  { id: "bgm-2", name: "Happy Sunshine", emoji: "☀️", duration: 90 },
-  { id: "bgm-3", name: "Adventure Time", emoji: "🎸", duration: 180 },
-  { id: "bgm-4", name: "Calm Piano", emoji: "🎹", duration: 150 },
-  { id: "bgm-5", name: "Upbeat Pop", emoji: "🎵", duration: 100 },
+// Free, license-safe music sources users can pull BGM from.
+const FREE_BGM_SOURCES = [
+  { name: "YouTube 오디오 라이브러리", url: "https://www.youtube.com/audiolibrary", desc: "저작권 걱정 없는 무료 음원" },
+  { name: "공유마당", url: "https://gongu.copyright.or.kr", desc: "한국저작권위원회 공유 저작물" },
+  { name: "Pixabay Music", url: "https://pixabay.com/music/", desc: "무료 BGM·효과음" },
 ];
 
 const STICKERS = [
@@ -26,13 +26,6 @@ const STICKERS = [
   "👍","👏","🙌","✌️","🤘","👌","🤝","🙏","💪","🤞",
 ];
 
-const TEXT_PRESETS = [
-  { label: "기본", patch: { color: "#FFFFFF", fontFamily: "Noto Sans KR", fontWeight: 700, strokeColor: "#000000", strokeWidth: 2 } },
-  { label: "팝", patch: { color: "#FFD93D", fontFamily: "Black Han Sans", fontWeight: 700, strokeColor: "#000000", strokeWidth: 4, shadowBlur: 8 } },
-  { label: "네온", patch: { color: "#3DF0FF", fontFamily: "Audiowide", strokeWidth: 0, shadowColor: "#3DF0FF", shadowBlur: 16, shadowOffsetX: 0, shadowOffsetY: 0 } },
-  { label: "노란상자", patch: { color: "#000000", fontFamily: "Do Hyeon", backgroundColor: "#FFD93D", bgPadding: 10, bgBorderRadius: 8, strokeWidth: 0 } },
-  { label: "유튜브", patch: { color: "#FFFFFF", fontFamily: "Roboto", fontWeight: 900, backgroundColor: "#000000", bgPadding: 6, bgBorderRadius: 4, strokeWidth: 0 } },
-];
 
 type Tab = "media" | "audio" | "text" | "sticker" | "image" | "markers";
 
@@ -73,12 +66,11 @@ export default function MediaPanel() {
   const setSeekRequest = useEditorStore((s) => s.setSeekRequest);
   const setCurrentTime = useEditorStore((s) => s.setCurrentTime);
 
-  const bgmAudio = audioClips.find((a) => a.track === 1 || a.track === undefined);
-
   // ── Video upload ──────────────────────────────────────────────────────────
   const handleVideoFiles = useCallback(
     async (files: FileList | File[]) => {
       setUploadError(null);
+      let added = 0;
       for (const file of Array.from(files)) {
         const ok = ACCEPTED_VIDEO.includes(file.type) || /\.(mp4|mov|webm)$/i.test(file.name);
         if (!ok) { setUploadError("mp4, mov, webm 파일만 지원합니다."); continue; }
@@ -98,8 +90,9 @@ export default function MediaPanel() {
           inPoint: 0, outPoint: duration,
           startTime: 0, fileId: id,
         }));
+        added++;
       }
-      toast({ message: `${Array.from(files).length}개 영상을 추가했어요`, type: "success" });
+      if (added > 0) toast({ message: `${added}개 영상을 추가했어요`, type: "success" });
     },
     [addVideoClip],
   );
@@ -283,35 +276,25 @@ export default function MediaPanel() {
             </div>
 
             <div style={{ fontSize: 11, color: "var(--text-muted)", margin: "16px 0 8px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-              기본 제공 BGM
+              무료 음원 구하는 곳
             </div>
             <div className="audio-preset-list">
-              {PRESET_BGM.map((b) => (
-                <button
-                  key={b.id}
-                  type="button"
-                  className={`audio-preset ${bgmAudio?.id === b.id ? "selected" : ""}`}
-                  onClick={() => {
-                    if (bgmAudio?.id === b.id) {
-                      removeAudioClip(b.id);
-                    } else {
-                      addAudioClip({
-                        id: b.id, name: b.name, url: "", duration: b.duration,
-                        isPreset: true, track: 1, volume: 0.8, fadeIn: 0, fadeOut: 0, startTime: 0,
-                      });
-                    }
-                  }}
-                  aria-pressed={bgmAudio?.id === b.id}
-                  title={`${b.name} - ${formatDur(b.duration)}`}
+              {FREE_BGM_SOURCES.map((s) => (
+                <a key={s.name} className="audio-preset" href={s.url} target="_blank" rel="noopener noreferrer"
+                  title={`${s.name} 새 탭에서 열기`}
                 >
-                  <span className="audio-preset-icon">{b.emoji}</span>
+                  <span className="audio-preset-icon">🎼</span>
                   <span>
-                    <div className="audio-preset-name">{b.name}</div>
-                    <div className="audio-preset-dur">{formatDur(b.duration)}</div>
+                    <div className="audio-preset-name">{s.name} ↗</div>
+                    <div className="audio-preset-dur">{s.desc}</div>
                   </span>
-                </button>
+                </a>
               ))}
             </div>
+            <p style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.6 }}>
+              다운로드한 mp3/wav 파일을 위의 <strong>BGM 추가</strong> 버튼으로 불러오세요.
+              타임라인에서 오디오를 드래그하면 시작 위치를 옮길 수 있어요.
+            </p>
 
             {audioClips.length > 0 && (
               <>
@@ -348,15 +331,27 @@ export default function MediaPanel() {
               style={{ minHeight: 96 }}
             />
 
-            <div className="label-row"><span>빠른 스타일</span></div>
-            <div className="text-presets">
-              {TEXT_PRESETS.map((p) => (
-                <button key={p.label} type="button" className="text-preset"
-                  onClick={() => {
-                    addCaption({ text: captionText.trim() || "텍스트", ...(p.patch as any) });
-                    setCaptionText("");
-                  }}
-                >{p.label}</button>
+            <div className="label-row">
+              <span>용도별 스타일 프리셋</span>
+              <span style={{ fontSize: 10, color: "var(--text-muted)" }}>클릭하면 바로 추가</span>
+            </div>
+            <div className="preset-groups">
+              {CAPTION_PRESET_GROUPS.map((g) => (
+                <div key={g.group} className="preset-group">
+                  <div className="preset-group-title">{g.emoji} {g.group}</div>
+                  <div className="text-presets">
+                    {g.presets.map((p) => (
+                      <button key={p.name} type="button" className="text-preset"
+                        style={{ fontFamily: p.patch.fontFamily, color: p.patch.color === "#FFFFFF" || p.patch.color === "#F4EFE6" || p.patch.color === "#F5F0E8" || p.patch.color === "#FFF8E7" ? undefined : p.patch.color }}
+                        title={`예시: ${p.sample}`}
+                        onClick={() => {
+                          addCaption({ text: captionText.trim() || p.sample, ...(p.patch as any) });
+                          setCaptionText("");
+                        }}
+                      >{p.name}</button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
 

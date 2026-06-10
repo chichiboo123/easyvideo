@@ -1,8 +1,43 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useEditorStore } from "@/store/editorStore";
-import type { Caption, CaptionAnimation } from "@/types";
+import { resolveTransition, transitionLabel } from "@/lib/transitions";
+import type { Caption, CaptionAnimation, TransitionType } from "@/types";
+
+// CSS approximation of each xfade transition for realtime preview feedback.
+function transitionOverlayStyle(type: TransitionType, intensity: number): React.CSSProperties {
+  const pct = Math.round(intensity * 100);
+  switch (type) {
+    case "fadewhite":
+      return { background: "#fff", opacity: intensity };
+    case "slide-left": case "smoothleft":
+      return { background: `linear-gradient(270deg, #000 ${pct}%, transparent ${pct}%)`, opacity: 0.85 };
+    case "slide-right":
+      return { background: `linear-gradient(90deg, #000 ${pct}%, transparent ${pct}%)`, opacity: 0.85 };
+    case "slide-up": case "wipe-up":
+      return { background: `linear-gradient(0deg, #000 ${pct}%, transparent ${pct}%)`, opacity: 0.85 };
+    case "slide-down": case "wipe-down":
+      return { background: `linear-gradient(180deg, #000 ${pct}%, transparent ${pct}%)`, opacity: 0.85 };
+    case "wipe-left":
+      return { background: `linear-gradient(270deg, #000 ${pct}%, transparent ${pct}%)`, opacity: 0.85 };
+    case "wipe-right":
+      return { background: `linear-gradient(90deg, #000 ${pct}%, transparent ${pct}%)`, opacity: 0.85 };
+    case "circleopen":
+      return { background: `radial-gradient(circle, transparent ${100 - pct}%, #000 ${100 - pct}%)`, opacity: 0.85 };
+    case "circleclose":
+      return { background: `radial-gradient(circle, #000 ${pct}%, transparent ${pct}%)`, opacity: 0.85 };
+    case "radial":
+      return { background: `conic-gradient(#000 ${pct}%, transparent ${pct}%)`, opacity: 0.85 };
+    case "pixelize":
+      return { background: "#000", opacity: intensity * 0.7, backdropFilter: `blur(${intensity * 8}px)` };
+    case "zoomin":
+      return { background: "#000", opacity: intensity * 0.6, backdropFilter: `blur(${intensity * 6}px)` };
+    // fade / fadeblack / dissolve
+    default:
+      return { background: "#000", opacity: intensity };
+  }
+}
 
 function formatTime(sec: number) {
   const h = Math.floor(sec / 3600);
@@ -43,6 +78,15 @@ function getCaptionAnim(c: Caption, currentTime: number): AnimResult {
         const totalLen = c.text.length;
         const charsShown = Math.floor(totalLen * progress);
         clipText = c.text.slice(0, charsShown);
+        break;
+      }
+      case "shake": {
+        // Horizontal jitter that settles as the animation completes.
+        translateX += Math.sin(progress * Math.PI * 8) * (1 - progress) * 10;
+        break;
+      }
+      case "blink": {
+        opacity = Math.min(opacity, progress >= 1 ? 1 : (Math.floor(progress * 6) % 2 === 0 ? 0.15 : 1));
         break;
       }
     }
@@ -144,16 +188,33 @@ export default function ProPreviewPanel() {
     else v.pause();
   }, [isPlaying, activeClipIndex, setPlaying]);
 
-  // Multi-audio: play all in sync
+  // Multi-audio: follow the timeline. Each audio starts at its own
+  // startTime offset, stays time-synced while playing or scrubbing, and is
+  // silent outside its range (fades approximated in realtime).
   useEffect(() => {
     for (const a of audioClips) {
       const el = audioRefs.current[a.id];
       if (!el) continue;
-      el.volume = (a.volume ?? 1) * (isAudioMuted ? 0 : 1);
-      if (isPlaying) el.play().catch(() => {});
-      else el.pause();
+      const start = a.startTime ?? 0;
+      const local = currentTime - start;
+      const dur = a.duration || 0;
+      const within = local >= 0 && (dur === 0 || local < dur);
+
+      let gain = (a.volume ?? 1) * volume;
+      if (a.fadeIn && local >= 0 && local < a.fadeIn) gain *= local / a.fadeIn;
+      if (a.fadeOut && dur > 0 && local > dur - a.fadeOut) gain *= Math.max(0, (dur - local) / a.fadeOut);
+      el.volume = Math.max(0, Math.min(1, isAudioMuted ? 0 : gain));
+
+      if (within && Math.abs(el.currentTime - local) > 0.35) {
+        try { el.currentTime = Math.max(0, local); } catch { /* not seekable yet */ }
+      }
+      if (isPlaying && within) {
+        if (el.paused) el.play().catch(() => {});
+      } else if (!el.paused) {
+        el.pause();
+      }
     }
-  }, [isPlaying, audioClips, isAudioMuted]);
+  }, [currentTime, isPlaying, audioClips, isAudioMuted, volume]);
 
   // Master volume on main video
   useEffect(() => {
@@ -217,30 +278,27 @@ export default function ProPreviewPanel() {
   const transitionDuration = useEditorStore((s) => s.transitionDuration);
 
   const transitionState = useMemo(() => {
-    if (transitionType === "none" || videoClips.length < 2) return null;
-    // Distance (sec) from the nearest *inner* clip boundary
+    if (videoClips.length < 2) return null;
+    // Find the nearest *inner* clip boundary and its effective transition
+    // (per-boundary override → global default).
     let nearestDelta = Infinity;
-    let nextClipName: string | null = null;
+    let boundaryType: typeof transitionType = "none";
     let acc = 0;
     for (let i = 0; i < videoClips.length - 1; i++) {
       acc += videoClips[i].duration;
       const delta = currentTime - acc; // <0 before boundary, >0 after
       if (Math.abs(delta) < Math.abs(nearestDelta)) {
         nearestDelta = delta;
-        nextClipName = videoClips[i + 1]?.name ?? null;
+        boundaryType = resolveTransition(videoClips[i].transitionAfter, transitionType);
       }
     }
+    if (boundaryType === "none") return null;
     const half = transitionDuration / 2;
     if (Math.abs(nearestDelta) > half) return null;
     // Bell curve: peak at boundary
     const intensity = 1 - Math.abs(nearestDelta) / half;
-    return { intensity, type: transitionType, nextClipName, isAfter: nearestDelta >= 0 };
+    return { intensity, type: boundaryType, isAfter: nearestDelta >= 0 };
   }, [transitionType, transitionDuration, currentTime, videoClips]);
-
-  const transitionLabel = transitionType === "fade" ? "페이드"
-    : transitionType === "dissolve" ? "디졸브"
-    : transitionType === "slide-left" ? "슬라이드"
-    : transitionType === "wipe-up" ? "와이프" : "";
 
   // CSS filter for the active video effect (so preview matches export)
   const videoEffect = useEditorStore((s) => s.videoEffect);
@@ -291,12 +349,12 @@ export default function ProPreviewPanel() {
           {transitionState && activeClip && (
             <>
               <div
-                className={`transition-overlay transition-${transitionState.type}`}
-                style={{ opacity: transitionState.intensity }}
+                className="transition-overlay"
+                style={transitionOverlayStyle(transitionState.type, transitionState.intensity)}
                 aria-hidden="true"
               />
               <div className="transition-label" aria-live="polite">
-                전환: {transitionLabel}
+                전환: {transitionLabel(transitionState.type)}
               </div>
             </>
           )}
@@ -497,9 +555,9 @@ export default function ProPreviewPanel() {
         </div>
       </div>
 
-      {/* Hidden audio elements for each clip */}
+      {/* Hidden audio elements for each clip (no loop: follow the timeline) */}
       {audioClips.filter((a) => a.url).map((a) => (
-        <audio key={a.id} ref={(el) => { audioRefs.current[a.id] = el; }} src={a.url} loop aria-hidden="true" />
+        <audio key={a.id} ref={(el) => { audioRefs.current[a.id] = el; }} src={a.url} preload="auto" aria-hidden="true" />
       ))}
     </section>
   );
