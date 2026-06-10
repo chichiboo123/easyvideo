@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useEditorStore } from "@/store/editorStore";
 import { FONTS, fontCategoryLabel, type FontSpec } from "@/lib/fonts";
-import type { Caption, CaptionAnimation } from "@/types";
+import { CAPTION_PRESET_GROUPS } from "@/lib/captionPresets";
+import { TRANSITIONS, TRANSITION_GROUPS, transitionLabel } from "@/lib/transitions";
+import type { Caption, CaptionAnimation, TransitionType } from "@/types";
 
 const CAPTION_SWATCHES = [
   "#FFFFFF","#000000","#FF4D4D","#FF8A3D","#FFD93D","#4CD964","#3D8BFF","#9B6DFF","#FF6BB6","#A78BFA",
@@ -22,6 +24,8 @@ const ANIM_OPTIONS: { value: CaptionAnimation; label: string }[] = [
   { value: "bounce", label: "통통" },
   { value: "pop", label: "팝" },
   { value: "typewriter", label: "타자기" },
+  { value: "shake", label: "흔들기" },
+  { value: "blink", label: "깜빡임" },
 ];
 
 const POSITIONS: { x: number; y: number; label: string }[] = [
@@ -34,15 +38,6 @@ const POSITIONS: { x: number; y: number; label: string }[] = [
   { x: 90, y: 85, label: "하단 우측" },
 ];
 
-const TEXT_PRESETS: Array<{ label: string; patch: Partial<Caption> }> = [
-  { label: "기본", patch: { fontFamily: "Noto Sans KR", fontWeight: 700, color: "#FFFFFF", strokeColor: "#000000", strokeWidth: 2, backgroundColor: "transparent" } },
-  { label: "팝", patch: { fontFamily: "Black Han Sans", fontWeight: 700, color: "#FFD93D", strokeColor: "#000000", strokeWidth: 4, shadowBlur: 8 } },
-  { label: "네온", patch: { fontFamily: "Audiowide", color: "#3DF0FF", strokeColor: "#3DF0FF", strokeWidth: 0, shadowColor: "#3DF0FF", shadowBlur: 16, shadowOffsetX: 0, shadowOffsetY: 0 } },
-  { label: "노란상자", patch: { fontFamily: "Do Hyeon", color: "#000000", backgroundColor: "#FFD93D", bgPadding: 10, bgBorderRadius: 8, strokeWidth: 0 } },
-  { label: "유튜브", patch: { fontFamily: "Roboto", fontWeight: 900, color: "#FFFFFF", backgroundColor: "#000000", bgPadding: 6, bgBorderRadius: 4, strokeWidth: 0 } },
-  { label: "외곽선", patch: { fontFamily: "Black Han Sans", color: "#FFFFFF", strokeColor: "#FE2C55", strokeWidth: 5, shadowBlur: 0 } },
-  { label: "그림자", patch: { fontFamily: "Montserrat", fontWeight: 900, color: "#FFFFFF", shadowColor: "rgba(0,0,0,0.9)", shadowBlur: 12, shadowOffsetX: 3, shadowOffsetY: 3, strokeWidth: 0 } },
-];
 
 function formatDur(sec: number) {
   const m = Math.floor(sec / 60);
@@ -155,6 +150,34 @@ export default function PropertiesPanel() {
             </div>
           </PropsSection>
 
+          {clipIdx < s.videoClips.length - 1 && (
+            <PropsSection title="다음 클립과의 전환">
+              <select className="prop-input"
+                value={selectedClip.transitionAfter ?? "__default__"}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  s.updateVideoClip(selectedClip.id, {
+                    transitionAfter: v === "__default__" ? null : (v as TransitionType),
+                  });
+                }}
+                aria-label="다음 클립과의 장면 전환"
+              >
+                <option value="__default__">기본값 따르기 ({transitionLabel(s.transitionType)})</option>
+                {TRANSITION_GROUPS.map((g) => (
+                  <optgroup key={g} label={g}>
+                    {TRANSITIONS.filter((t) => t.group === g).map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <p style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5 }}>
+                이 클립이 끝나고 <strong>{s.videoClips[clipIdx + 1]?.name}</strong>(으)로
+                넘어갈 때의 전환 효과예요.
+              </p>
+            </PropsSection>
+          )}
+
           <div style={{ display: "flex", gap: 6 }}>
             <button type="button" className="btn-secondary-half" onClick={() => s.duplicateVideoClip(selectedClip.id)}>복제</button>
             <button type="button" className="btn-danger-half" onClick={() => s.removeVideoClip(selectedClip.id)}>삭제</button>
@@ -212,13 +235,25 @@ export default function PropertiesPanel() {
             </div>
           </PropsSection>
 
-          <PropsSection title="프리셋">
-            <div className="text-presets">
-              {TEXT_PRESETS.map((p) => (
-                <button key={p.label} type="button" className="text-preset"
-                  onClick={() => update(p.patch)}
-                  title={p.label}
-                >{p.label}</button>
+          <PropsSection title="용도별 프리셋">
+            <div className="preset-groups">
+              {CAPTION_PRESET_GROUPS.map((g) => (
+                <div key={g.group} className="preset-group">
+                  <div className="preset-group-title">{g.emoji} {g.group}</div>
+                  <div className="text-presets">
+                    {g.presets.map((p) => {
+                      // Keep the caption's own text/timing; apply only the look.
+                      const { x: _x, y: _y, ...styleOnly } = p.patch;
+                      return (
+                        <button key={p.name} type="button" className="text-preset"
+                          style={{ fontFamily: p.patch.fontFamily }}
+                          onClick={() => update(styleOnly)}
+                          title={`${p.name} 스타일 적용`}
+                        >{p.name}</button>
+                      );
+                    })}
+                  </div>
+                </div>
               ))}
             </div>
           </PropsSection>

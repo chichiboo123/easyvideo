@@ -7,6 +7,7 @@ const ROWS: Array<{ key: string; desc: string }> = [
   { key: "J", desc: "5초 뒤로" },
   { key: "L", desc: "5초 앞으로" },
   { key: "← / →", desc: "1초 뒤/앞 (Shift = 5초)" },
+  { key: ", / .", desc: "1프레임(1/30초) 뒤/앞 — 정밀 컷" },
   { key: "S", desc: "현재 위치에서 클립 분할" },
   { key: "M", desc: "현재 위치에 마커 추가" },
   { key: "F", desc: "전체화면 전환" },
@@ -58,7 +59,10 @@ export default function ShortcutsModal({ onClose }: Props) {
           <h3 className="help-section-title">💡 전환 효과 사용 안내</h3>
           <p className="help-note">
             전환 효과는 <strong>이어진 클립 사이</strong> — 앞 클립의 <em>끝</em>과 뒤 클립의 <em>시작</em>이
-            만나는 지점에 적용됩니다. <strong>S 키</strong>로 클립을 분할하면 두 클립 사이에 자동으로 전환이 들어가요.
+            만나는 지점에 적용됩니다. 타임라인 도구막대의 선택은 <strong>모든 구간의 기본값</strong>이고,
+            클립 사이의 <strong>둥근 배지를 클릭</strong>하거나 클립 속성의
+            “다음 클립과의 전환”에서 <strong>구간별로 다른 효과</strong>를 줄 수 있어요.
+            페이드·디졸브·슬라이드·와이프·원형·시계·픽셀화 등 18종을 지원합니다.
           </p>
         </section>
 

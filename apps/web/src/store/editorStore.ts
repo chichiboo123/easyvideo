@@ -199,6 +199,7 @@ export function defaultVideoClip(partial: Partial<VideoClip> & { id?: string; na
     volume: partial.volume ?? 1,
     fadeIn: partial.fadeIn ?? 0,
     fadeOut: partial.fadeOut ?? 0,
+    transitionAfter: partial.transitionAfter ?? null,
   };
 }
 
@@ -658,8 +659,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       if (state.historyFuture.length === 0) return {};
       const next = state.historyFuture[0];
       const current = snapshotOf(state);
+      // Redo must always restore an undo point — never coalesce here.
       return {
-        historyPast: pushHistory(state.historyPast, current),
+        historyPast: [...state.historyPast, current].slice(-100),
         historyFuture: state.historyFuture.slice(1),
         ...next,
       };
@@ -737,6 +739,7 @@ function migrateVideoClip(v: any): VideoClip {
     volume: v.volume ?? 1,
     fadeIn: v.fadeIn ?? 0,
     fadeOut: v.fadeOut ?? 0,
+    transitionAfter: v.transitionAfter ?? null,
   });
 }
 function migrateCaption(c: any): Caption {
@@ -774,7 +777,18 @@ function snapshotOf(state: Pick<EditorState, "videoClips" | "audioClips" | "capt
   };
 }
 
+// Rapid-fire updates (slider drags, trim drags, preview drags) are coalesced
+// into a single history entry: while updates keep arriving within the window,
+// only the snapshot taken at the start of the burst is kept, so one Ctrl+Z
+// returns to the state before the whole gesture — not 100 micro-steps back.
+const HISTORY_COALESCE_MS = 400;
+let lastHistoryPushAt = 0;
+
 function pushHistory(past: EditorSnapshot[], snapshot: EditorSnapshot) {
+  const now = Date.now();
+  const withinBurst = now - lastHistoryPushAt < HISTORY_COALESCE_MS;
+  lastHistoryPushAt = now;
+  if (withinBurst) return past;
   const next = [...past, snapshot];
   if (next.length > 100) return next.slice(next.length - 100);
   return next;

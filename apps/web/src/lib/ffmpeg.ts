@@ -5,6 +5,7 @@ import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import type {
   Caption,
   Sticker,
+  ImageOverlay,
   VideoClip,
   AudioClip,
   TransitionType,
@@ -12,6 +13,14 @@ import type {
   AspectRatio,
   ExportQuality,
 } from "@/types";
+import { resolveTransition, transitionXfadeName } from "@/lib/transitions";
+import {
+  renderCaptionOverlay,
+  renderStickerOverlay,
+  renderImageOverlay,
+  probeVideoSize,
+  type RenderedOverlay,
+} from "@/lib/overlayRender";
 
 let ffmpeg: FFmpeg | null = null;
 let loadPromise: Promise<FFmpeg> | null = null;
@@ -40,11 +49,20 @@ export async function getFFmpeg(
   return loadPromise;
 }
 
+// Hard-stop a running export. The wasm worker is killed, so the cached
+// instance is discarded and the next export reloads FFmpeg from scratch.
+export function cancelExport() {
+  try { ffmpeg?.terminate(); } catch { /* already dead */ }
+  ffmpeg = null;
+  loadPromise = null;
+}
+
 interface ExportOptions {
   clips: VideoClip[];
   audios: AudioClip[];
   captions: Caption[];
   stickers: Sticker[];
+  images?: ImageOverlay[];
   isAudioMuted?: boolean;
   transitionType?: TransitionType;
   transitionDuration?: number;
@@ -52,10 +70,6 @@ interface ExportOptions {
   aspectRatio?: AspectRatio;
   quality?: ExportQuality;
   onProgress?: (ratio: number) => void;
-}
-
-function escapeDrawText(text: string) {
-  return text.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'");
 }
 
 function aspectRatioSize(ratio: AspectRatio, quality: ExportQuality): { w: number; h: number } | null {
@@ -93,6 +107,7 @@ export async function exportVideo({
   audios,
   captions,
   stickers,
+  images = [],
   isAudioMuted = false,
   transitionType = "none",
   transitionDuration = 0.4,
@@ -113,19 +128,21 @@ export async function exportVideo({
     inputNames.push(name);
   }
 
-  // ── 2. Trim + speed each clip into trimmed_i.mp4 ─────────────────────────
+  // ── 2. Trim + speed each clip into trim_i.mp4 ────────────────────────────
   const trimmedNames: string[] = [];
+  const trimmedDur: number[] = [];
   for (let i = 0; i < clips.length; i++) {
     const c = clips[i];
     const out = `trim_${i}.mp4`;
     const trimArgs: string[] = ["-ss", c.inPoint.toString(), "-to", c.outPoint.toString(), "-i", inputNames[i]];
+    const dur = (c.outPoint - c.inPoint) / c.speed;
+    trimmedDur.push(dur);
+
     const vf: string[] = [];
     if (c.speed !== 1) vf.push(`setpts=${(1 / c.speed).toFixed(4)}*PTS`);
     if (c.fadeIn > 0) vf.push(`fade=t=in:st=0:d=${c.fadeIn}`);
-    if (c.fadeOut > 0) {
-      const dur = (c.outPoint - c.inPoint) / c.speed;
-      vf.push(`fade=t=out:st=${Math.max(0, dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut}`);
-    }
+    if (c.fadeOut > 0) vf.push(`fade=t=out:st=${Math.max(0, dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut}`);
+
     const af: string[] = [];
     if (c.speed !== 1) {
       // atempo handles 0.5x ~ 2x; chain for extremes
@@ -136,10 +153,7 @@ export async function exportVideo({
     }
     if (c.volume !== 1) af.push(`volume=${c.volume.toFixed(3)}`);
     if (c.fadeIn > 0) af.push(`afade=t=in:st=0:d=${c.fadeIn}`);
-    if (c.fadeOut > 0) {
-      const dur = (c.outPoint - c.inPoint) / c.speed;
-      af.push(`afade=t=out:st=${Math.max(0, dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut}`);
-    }
+    if (c.fadeOut > 0) af.push(`afade=t=out:st=${Math.max(0, dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut}`);
 
     const args: string[] = [...trimArgs];
     if (vf.length > 0) { args.push("-vf", vf.join(",")); }
@@ -149,36 +163,44 @@ export async function exportVideo({
     trimmedNames.push(out);
   }
 
-  // ── 3. Concat / transition ───────────────────────────────────────────────
-  if (transitionType !== "none" && clips.length > 1) {
-    const filter = transitionType === "dissolve" ? "dissolve"
-      : transitionType === "slide-left" ? "slideleft"
-      : transitionType === "wipe-up" ? "wipeup"
-      : "fade";
+  // ── 3. Concat with per-boundary transitions ──────────────────────────────
+  // Each boundary uses the clip's own transition, falling back to the
+  // project default. A "none" boundary becomes a near-instant 0.05s fade so
+  // mixed chains (cut + transition) still work in a single xfade graph.
+  const boundaries: TransitionType[] = [];
+  for (let i = 0; i < clips.length - 1; i++) {
+    boundaries.push(resolveTransition(clips[i].transitionAfter, transitionType));
+  }
+  const hasAnyTransition = boundaries.some((b) => b !== "none");
+
+  if (hasAnyTransition && clips.length > 1) {
     const fc: string[] = [];
-    let cumulative = (clips[0].outPoint - clips[0].inPoint) / clips[0].speed;
-    fc.push(`[0:v]format=yuv420p,fps=30[v0]`);
-    for (let i = 1; i < clips.length; i++) {
+    for (let i = 0; i < clips.length; i++) {
       fc.push(`[${i}:v]format=yuv420p,fps=30[v${i}]`);
     }
-    let prev = `[v0]`;
+    let prevV = "[v0]";
+    let prevA = "[0:a]";
+    let cumulative = trimmedDur[0];
     for (let i = 1; i < clips.length; i++) {
-      const offset = Math.max(0, cumulative - transitionDuration);
-      const right = `[v${i}]`;
-      const out = `[x${i}]`;
-      fc.push(`${prev}${right}xfade=transition=${filter}:duration=${transitionDuration}:offset=${offset}${out}`);
-      cumulative += (clips[i].outPoint - clips[i].inPoint) / clips[i].speed - transitionDuration;
-      prev = out;
+      const t = boundaries[i - 1];
+      const rawD = t === "none" ? 0.05 : transitionDuration;
+      // xfade duration may not exceed either side of the boundary.
+      const d = Math.max(0.04, Math.min(rawD, trimmedDur[i - 1] * 0.5, trimmedDur[i] * 0.5));
+      const offset = Math.max(0, cumulative - d);
+      const outV = `[x${i}]`;
+      fc.push(`${prevV}[v${i}]xfade=transition=${transitionXfadeName(t)}:duration=${d.toFixed(3)}:offset=${offset.toFixed(3)}${outV}`);
+      // Keep audio in sync with the same crossfade length.
+      const outA = `[ax${i}]`;
+      fc.push(`${prevA}[${i}:a]acrossfade=d=${d.toFixed(3)}${outA}`);
+      cumulative += trimmedDur[i] - d;
+      prevV = outV;
+      prevA = outA;
     }
-    // Audio: concat
-    const audioMaps: string[] = [];
-    for (let i = 0; i < clips.length; i++) audioMaps.push(`[${i}:a]`);
-    fc.push(`${audioMaps.join("")}concat=n=${clips.length}:v=0:a=1[aout]`);
     const xfadeInputs = trimmedNames.flatMap((n) => ["-i", n]);
     await instance.exec([
       ...xfadeInputs,
       "-filter_complex", fc.join(";"),
-      "-map", prev, "-map", "[aout]",
+      "-map", prevV, "-map", prevA,
       "-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac",
       "concat.mp4",
     ]);
@@ -188,76 +210,100 @@ export async function exportVideo({
     await instance.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "concat.mp4"]);
   }
 
-  // ── 4. Build subtitle overlay (drawtext) for captions + stickers ─────────
-  const filters: string[] = [];
-
-  // Aspect-ratio scaling/padding.
+  // ── 4. Render overlays (captions / stickers / images) to PNG ─────────────
+  // Done in the browser so Korean fonts, emoji, outlines and shadows are
+  // pixel-identical to the preview.
   const size = aspectRatioSize(aspectRatio, quality);
-  if (size) {
-    filters.push(`scale=${size.w}:${size.h}:force_original_aspect_ratio=decrease`);
-    filters.push(`pad=${size.w}:${size.h}:(ow-iw)/2:(oh-ih)/2:black`);
+  let outW = size?.w ?? 0;
+  let outH = size?.h ?? 0;
+  if (!size) {
+    const probed = await probeVideoSize(clips[0].url);
+    outW = probed?.w ?? 1280;
+    outH = probed?.h ?? 720;
   }
 
-  // Video effect.
-  const effectFilter = videoEffectFilter(videoEffect);
-  if (effectFilter) filters.push(effectFilter);
-
-  // Captions.
-  for (const c of captions) {
-    const fontSize = c.fontSize;
-    const x = `(w*${c.x / 100}-text_w/2)`;
-    const y = `(h*${c.y / 100}-text_h/2)`;
-    const between = `between(t,${c.startTime},${c.endTime})`;
-    const stroke = c.strokeWidth > 0
-      ? `:bordercolor=${cssToFFmpegColor(c.strokeColor)}:borderw=${c.strokeWidth}`
-      : "";
-    const bg = c.backgroundColor && c.backgroundColor !== "transparent"
-      ? `:box=1:boxcolor=${cssToFFmpegColor(c.backgroundColor)}@0.6:boxborderw=${c.bgPadding}`
-      : "";
-    const shadow = c.shadowBlur > 0
-      ? `:shadowcolor=${cssToFFmpegColor(c.shadowColor)}:shadowx=${c.shadowOffsetX}:shadowy=${c.shadowOffsetY}`
-      : "";
-    filters.push(
-      `drawtext=text='${escapeDrawText(c.text)}':fontcolor=${cssToFFmpegColor(c.color)}:fontsize=${fontSize}${stroke}${bg}${shadow}:x=${x}:y=${y}:enable='${between}'`,
-    );
-  }
-  // Stickers (emoji as drawtext).
-  for (const s of stickers) {
-    filters.push(
-      `drawtext=text='${escapeDrawText(s.emoji)}':fontsize=${s.size}:x=(w*${s.x / 100}-text_w/2):y=(h*${s.y / 100}-text_h/2):enable='between(t,${s.startTime},${s.endTime})'`,
-    );
+  const overlays: RenderedOverlay[] = [];
+  for (const c of captions) overlays.push(await renderCaptionOverlay(c, outW, outH));
+  for (const s of stickers) overlays.push(await renderStickerOverlay(s, outW, outH));
+  for (const img of images) {
+    try { overlays.push(await renderImageOverlay(img, outW, outH)); }
+    catch { /* unloadable image — skip rather than fail the export */ }
   }
 
-  // ── 5. Mix audio ─────────────────────────────────────────────────────────
+  // ── 5. Compose final video: scale → effect → overlays → audio mix ────────
   const args: string[] = ["-i", "concat.mp4"];
+
+  for (let i = 0; i < overlays.length; i++) {
+    const ov = overlays[i];
+    const name = `ov_${i}.png`;
+    await instance.writeFile(name, ov.png);
+    const dur = Math.max(0.1, ov.endTime - ov.startTime);
+    args.push("-loop", "1", "-t", dur.toFixed(3), "-i", name);
+  }
+
   const usableAudios = isAudioMuted ? [] : audios.filter((a) => a.url);
+  const audioInputOffset = 1 + overlays.length;
   for (let i = 0; i < usableAudios.length; i++) {
     await instance.writeFile(`a${i}.mp3`, await fetchFile(usableAudios[i].url));
     args.push("-i", `a${i}.mp3`);
   }
 
   const fc: string[] = [];
-  if (filters.length > 0) {
-    fc.push(`[0:v]${filters.join(",")}[vout]`);
+
+  // Base chain: aspect-ratio scaling + global effect.
+  const baseFilters: string[] = [];
+  if (size) {
+    baseFilters.push(`scale=${size.w}:${size.h}:force_original_aspect_ratio=decrease`);
+    baseFilters.push(`pad=${size.w}:${size.h}:(ow-iw)/2:(oh-ih)/2:black`);
   }
-  let aoutLabel = "0:a";
+  const effectFilter = videoEffectFilter(videoEffect);
+  if (effectFilter) baseFilters.push(effectFilter);
+
+  let vLabel = "[0:v]";
+  if (baseFilters.length > 0) {
+    fc.push(`[0:v]${baseFilters.join(",")}[vbase]`);
+    vLabel = "[vbase]";
+  }
+
+  // Overlay chain with alpha fade in/out per overlay.
+  for (let i = 0; i < overlays.length; i++) {
+    const ov = overlays[i];
+    const inIdx = 1 + i;
+    const dur = Math.max(0.1, ov.endTime - ov.startTime);
+    const ovFilters: string[] = ["format=argb"];
+    if (ov.fadeIn > 0) ovFilters.push(`fade=t=in:st=0:d=${Math.min(ov.fadeIn, dur / 2).toFixed(3)}:alpha=1`);
+    if (ov.fadeOut > 0) {
+      const d = Math.min(ov.fadeOut, dur / 2);
+      ovFilters.push(`fade=t=out:st=${(dur - d).toFixed(3)}:d=${d.toFixed(3)}:alpha=1`);
+    }
+    ovFilters.push(`setpts=PTS-STARTPTS+${ov.startTime.toFixed(3)}/TB`);
+    fc.push(`[${inIdx}:v]${ovFilters.join(",")}[ov${i}]`);
+    const outLabel = `[vo${i}]`;
+    fc.push(`${vLabel}[ov${i}]overlay=0:0:enable='between(t,${ov.startTime.toFixed(3)},${ov.endTime.toFixed(3)})'${outLabel}`);
+    vLabel = outLabel;
+  }
+
+  // Audio mix: timeline offset (adelay) + per-track volume/fades.
+  let aLabel = "0:a";
   if (usableAudios.length > 0) {
-    const inputs: string[] = ["[0:a]"];
+    const mixInputs: string[] = ["[0:a]"];
     for (let i = 0; i < usableAudios.length; i++) {
       const a = usableAudios[i];
-      const vol = (a.volume ?? 1);
-      const af: string[] = [`volume=${vol.toFixed(3)}`];
+      const af: string[] = [`volume=${(a.volume ?? 1).toFixed(3)}`];
       if (a.fadeIn) af.push(`afade=t=in:st=0:d=${a.fadeIn}`);
       if (a.fadeOut) af.push(`afade=t=out:st=${Math.max(0, a.duration - a.fadeOut).toFixed(3)}:d=${a.fadeOut}`);
-      fc.push(`[${i + 1}:a]${af.join(",")}[a${i + 1}]`);
-      inputs.push(`[a${i + 1}]`);
+      const delayMs = Math.round((a.startTime ?? 0) * 1000);
+      if (delayMs > 0) af.push(`adelay=${delayMs}:all=1`);
+      fc.push(`[${audioInputOffset + i}:a]${af.join(",")}[am${i}]`);
+      mixInputs.push(`[am${i}]`);
     }
-    fc.push(`${inputs.join("")}amix=inputs=${inputs.length}:duration=longest:dropout_transition=0[aout]`);
-    aoutLabel = "[aout]";
+    fc.push(`${mixInputs.join("")}amix=inputs=${mixInputs.length}:duration=first:dropout_transition=0[aout]`);
+    aLabel = "[aout]";
   }
+
   if (fc.length > 0) args.push("-filter_complex", fc.join(";"));
-  args.push("-map", filters.length > 0 ? "[vout]" : "0:v");
-  args.push("-map", aoutLabel);
+  args.push("-map", vLabel === "[0:v]" ? "0:v" : vLabel);
+  args.push("-map", aLabel);
   args.push("-shortest");
   args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "out.mp4");
 
@@ -267,20 +313,4 @@ export async function exportVideo({
   const copy = new Uint8Array(buffer.byteLength);
   copy.set(buffer);
   return new Blob([copy], { type: "video/mp4" });
-}
-
-// Hex/CSS color → ffmpeg color string. ffmpeg accepts named or 0xRRGGBB or #RRGGBB.
-function cssToFFmpegColor(c: string): string {
-  if (!c) return "white";
-  if (c === "transparent") return "0x00000000";
-  if (c.startsWith("rgba")) {
-    const m = c.match(/rgba?\(([^)]+)\)/);
-    if (m) {
-      const parts = m[1].split(",").map((x) => x.trim());
-      const [r, g, b] = parts;
-      const hex = (n: string) => Number(n).toString(16).padStart(2, "0");
-      return `0x${hex(r)}${hex(g)}${hex(b)}`;
-    }
-  }
-  return c.startsWith("#") ? c : c;
 }
