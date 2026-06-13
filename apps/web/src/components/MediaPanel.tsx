@@ -6,6 +6,7 @@ import { saveFile } from "@/lib/storage";
 import { toast } from "@/lib/notifications";
 import { parseSrt, parseVtt, downloadSrt } from "@/lib/srt";
 import { CAPTION_PRESET_GROUPS } from "@/lib/captionPresets";
+import MIcon from "./MIcon";
 
 const ACCEPTED_VIDEO = ["video/mp4", "video/quicktime", "video/webm"];
 
@@ -176,13 +177,13 @@ export default function MediaPanel() {
   useEffect(() => () => { mediaRecorderRef.current?.stop(); }, []);
 
   const tabs: { id: Tab; label: string; icon: string }[] = [
-    { id: "media",   label: "미디어",  icon: "🎬" },
-    { id: "audio",   label: "오디오",  icon: "🎵" },
-    { id: "text",    label: "텍스트",  icon: "T" },
-    { id: "sticker", label: "스티커",  icon: "✦" },
-    { id: "image",   label: "이미지",  icon: "🖼" },
-    { id: "shape",   label: "도형",    icon: "▭" },
-    { id: "markers", label: "마커",    icon: "📍" },
+    { id: "media",   label: "미디어",  icon: "movie" },
+    { id: "audio",   label: "오디오",  icon: "music_note" },
+    { id: "text",    label: "텍스트",  icon: "title" },
+    { id: "sticker", label: "스티커",  icon: "star" },
+    { id: "image",   label: "이미지",  icon: "image" },
+    { id: "shape",   label: "도형",    icon: "category" },
+    { id: "markers", label: "마커",    icon: "push_pin" },
   ];
 
   return (
@@ -198,7 +199,7 @@ export default function MediaPanel() {
             aria-controls={`tabpanel-${t.id}`}
             title={t.label}
           >
-            <span className="panel-tab-icon" aria-hidden="true">{t.icon}</span>
+            <span className="panel-tab-icon" aria-hidden="true"><MIcon name={t.icon} size={20} fill={tab === t.id} /></span>
             <span className="panel-tab-label">{t.label}</span>
           </button>
         ))}
@@ -219,10 +220,7 @@ export default function MediaPanel() {
               aria-label="영상 드롭 영역 — 클릭하거나 영상 파일을 드래그하세요"
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") inputRef.current?.click(); }}
             >
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3" style={{ margin: "0 auto", display: "block", opacity: 0.35 }} aria-hidden="true">
-                <rect x="2" y="3" width="20" height="14" rx="2"/>
-                <path d="M10 8l6 4-6 4V8z"/>
-              </svg>
+              <MIcon name="video_library" size={40} style={{ margin: "0 auto", display: "block", opacity: 0.35 }} />
               <p>영상을 끌어다 놓거나 클릭</p>
               <span style={{ fontSize: 11, color: "var(--text-muted)" }}>mp4 · mov · webm</span>
               <input ref={inputRef} type="file"
@@ -259,9 +257,7 @@ export default function MediaPanel() {
           <>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <label className="btn-upload" title="MP3, WAV 파일을 BGM(M1)으로 추가">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                  <path d="M12 5v14M5 12l7-7 7 7"/>
-                </svg>
+                <MIcon name="upload" size={15} />
                 BGM 추가 (M1)
                 <input ref={audioInputRef} type="file" accept="audio/*"
                   style={{ display: "none" }}

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { useEditorStore } from "@/store/editorStore";
+import MIcon from "./MIcon";
 import { resolveTransition, transitionLabel } from "@/lib/transitions";
 import type { Caption, CaptionAnimation, TransitionType } from "@/types";
 
@@ -391,10 +392,7 @@ export default function ProPreviewPanel() {
             />
           ) : (
             <div className="preview-empty">
-              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" aria-hidden="true">
-                <rect x="2" y="3" width="20" height="14" rx="2"/>
-                <path d="M10 8l6 4-6 4V8z"/>
-              </svg>
+              <MIcon name="movie" size={56} />
               <p>영상을 추가해 시작하세요</p>
             </div>
           )}
@@ -614,9 +612,7 @@ export default function ProPreviewPanel() {
           aria-label="5초 뒤로"
           title="5초 뒤로 (J)"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
-          </svg>
+          <MIcon name="replay_5" size={22} />
         </button>
         <button type="button" className="ctrl-btn play-btn"
           onClick={() => setPlaying(!isPlaying)}
@@ -624,15 +620,7 @@ export default function ProPreviewPanel() {
           aria-label={isPlaying ? "일시정지" : "재생"}
           title={isPlaying ? "일시정지 (Space)" : "재생 (Space)"}
         >
-          {isPlaying ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
-            </svg>
-          ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M8 5v14l11-7z"/>
-            </svg>
-          )}
+          <MIcon name={isPlaying ? "pause" : "play_arrow"} size={26} fill />
         </button>
         <button type="button" className="ctrl-btn"
           onClick={() => seekRelative(5)}
@@ -640,9 +628,7 @@ export default function ProPreviewPanel() {
           aria-label="5초 앞으로"
           title="5초 앞으로 (L)"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
-          </svg>
+          <MIcon name="forward_5" size={22} />
         </button>
 
         <div className="time-display" aria-label={`현재 시간 ${formatTime(currentTime)}`}>
@@ -650,9 +636,7 @@ export default function ProPreviewPanel() {
         </div>
 
         <div className="volume-row">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: "var(--text-muted)", flexShrink: 0 }} aria-hidden="true">
-            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 00-2.7-4.1v8.2A4.5 4.5 0 0016.5 12z"/>
-          </svg>
+          <MIcon name="volume_up" size={18} fill style={{ color: "var(--text-muted)", flexShrink: 0 }} />
           <input type="range" className="volume-slider"
             min={0} max={1} step={0.05}
             value={volume}
@@ -666,9 +650,7 @@ export default function ProPreviewPanel() {
             aria-label="전체화면 토글"
             disabled={!activeClip}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-              <path d="M5 9V5h4M19 9V5h-4M5 15v4h4M19 15v4h-4"/>
-            </svg>
+            <MIcon name="fullscreen" size={20} />
           </button>
         </div>
       </div>

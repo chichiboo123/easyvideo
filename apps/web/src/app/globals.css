@@ -58,6 +58,22 @@ button, select, input, textarea {
   color: inherit;
 }
 
+/* Google Material Symbols (Rounded) */
+.material-symbols-rounded {
+  font-family: "Material Symbols Rounded";
+  font-weight: normal;
+  font-style: normal;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  white-space: nowrap;
+  direction: ltr;
+  -webkit-font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
 /* focus ring – keyboard only */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 :focus:not(:focus-visible) { outline: none; }
@@ -340,7 +356,7 @@ button, select, input, textarea {
   justify-content: center;
   gap: 2px;
 }
-.panel-tab-icon { font-size: 13px; line-height: 1; opacity: 0.85; }
+.panel-tab-icon { font-size: 13px; line-height: 1; opacity: 0.85; display: inline-flex; }
 .panel-tab-label { font-size: 11px; }
 
 .panel-body {
@@ -898,6 +914,8 @@ button, select, input, textarea {
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
 .tl-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); border-color: var(--text-muted); }
@@ -988,7 +1006,7 @@ button, select, input, textarea {
   width: 80px;
   height: 100%;
   background: var(--ruler-bg);
-  z-index: 21;
+  z-index: 31;
   border-right: 1px solid var(--border);
 }
 .ruler-marks {
@@ -1032,7 +1050,9 @@ button, select, input, textarea {
   flex-shrink: 0;
   position: sticky;
   left: 0;
-  z-index: 15;
+  /* Above the playhead (z25) so the line is masked when it scrolls under the
+     sticky track labels instead of drawing on top of them. */
+  z-index: 30;
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
   display: flex;
@@ -1106,16 +1126,31 @@ button, select, input, textarea {
   z-index: 25;
   pointer-events: auto;
   box-shadow: 0 0 8px rgba(254,44,85,0.5);
+  cursor: ew-resize;
+  touch-action: none;
+}
+/* Wide invisible hit area so the thin line is easy to grab (esp. touch). */
+.playhead-grab {
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  cursor: ew-resize;
 }
 .playhead-handle {
   position: absolute;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 12px; height: 12px;
+  width: 14px; height: 14px;
   background: var(--playhead);
   border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  cursor: ew-resize;
 }
+/* Scrubbing from the ruler shouldn't scroll the page on touch. */
+.ruler { touch-action: none; }
 
 /* ── Export modal overlay ───────────────────────────────────────────── */
 .export-overlay {
@@ -1442,6 +1477,13 @@ button, select, input, textarea {
     overflow: auto;
     touch-action: manipulation;
   }
+  /* Let the whole app grow and scroll vertically instead of being clipped
+     to 100vh — otherwise wrapped toolbar rows overlap the preview. */
+  .app-shell {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
   .app {
     height: auto;
     min-height: 100vh;
@@ -1454,23 +1496,35 @@ button, select, input, textarea {
       "timeline";
     overflow: visible;
   }
+  /* Static (not sticky) so wrapped rows take real height and push the
+     preview down instead of floating over it. */
   .toolbar {
-    position: sticky;
-    top: 0;
+    position: static;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
     padding: 8px;
     height: auto;
-    min-height: 56px;
+    min-height: 52px;
   }
-  .toolbar-btn, .btn-export, .panel-tab, .tl-btn {
-    min-height: 42px;
-    min-width: 42px;
+  /* The flex:1 spacer forced a full-width line break that dropped the export
+     button onto the preview. Collapse it on mobile so items flow naturally. */
+  .toolbar-spacer { display: none; flex: 0; }
+  .toolbar-logo { width: 100%; margin-bottom: 2px; }
+  .btn-export { margin-left: auto; }
+  .btn-export, .panel-tab, .tl-btn {
+    min-height: 40px;
     font-size: 12px;
   }
+  .tb-icon-btn { width: 38px; height: 38px; }
   .props-panel { display: none; }
   .media-panel { border-right: none; border-top: 1px solid var(--border); min-height: 220px; }
   .timeline { min-height: 220px; }
+  .timeline-toolbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 40px;
+    padding: 6px 8px;
+  }
   .timeline-body { overflow: auto; -webkit-overflow-scrolling: touch; }
   :root {
     --panel-left: 100%;

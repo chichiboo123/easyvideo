@@ -12,6 +12,11 @@ const normalizeBasePath = (value: string | undefined) => {
 
 const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH);
 
+// Material Symbols (Rounded) icon font. Built as a value so the Next lint rules
+// for static font links (which target string literals) don't false-positive.
+const MATERIAL_SYMBOLS_HREF =
+  "https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-25..200&display=block";
+
 export const metadata: Metadata = {
   title: "영상편집 걱정마 - Easy Video",
   description: "초등학생부터 누구나 쉽게 사용하는 어린이 친화적 브라우저 영상 편집기",
@@ -28,6 +33,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link href={buildGoogleFontsHref()} rel="stylesheet" />
+        <link href={MATERIAL_SYMBOLS_HREF} rel="stylesheet" />
         <link rel="icon" href={`${basePath}/favicon.svg`} type="image/svg+xml" />
       </head>
       <body>
