@@ -17,6 +17,22 @@ export interface VideoClip {
   fadeIn: number;          // sec
   fadeOut: number;         // sec
 
+  // Transform within the frame (CapCut "편집/크롭" style)
+  zoom: number;            // 1 = fit, >1 = zoom in (crop)
+  offsetX: number;         // -50 ~ 50 (% of frame, pan; only meaningful with zoom>1)
+  offsetY: number;         // -50 ~ 50
+  rotate: number;          // -180 ~ 180 deg
+  flipH: boolean;          // mirror horizontally
+  flipV: boolean;          // mirror vertically
+
+  // Per-clip color adjustment (0~200, 100 = neutral)
+  brightness: number;
+  contrast: number;
+  saturation: number;
+
+  // Reverse playback (applied on export; preview shows a badge)
+  reverse: boolean;
+
   // Transition between this clip and the NEXT one.
   // undefined/null = follow the global default transition.
   transitionAfter?: TransitionType | null;
@@ -117,12 +133,37 @@ export interface Sticker {
   animationDuration: number;
 }
 
+export type ShapeKind = "rect" | "ellipse" | "triangle" | "line";
+
+export interface Shape {
+  id: string;
+  kind: ShapeKind;
+  x: number;               // center %, like other overlays
+  y: number;
+  width: number;           // % of frame width
+  height: number;          // % of frame height
+  rotation: number;        // deg
+  fillColor: string;       // "transparent" or hex
+  strokeColor: string;
+  strokeWidth: number;     // px (720p reference)
+  opacity: number;         // 0 ~ 1
+  startTime: number;
+  endTime: number;
+  animationIn: "none" | "fade" | "slide-up" | "slide-down" | "zoom-in" | "pop";
+  animationOut: "none" | "fade" | "zoom-out";
+  animationDuration: number;
+}
+
 export interface Marker {
   id: string;
   time: number;
   label: string;
   color: string;
 }
+
+// Letterbox/pillarbox fill when the clip doesn't match the export aspect ratio.
+// "black" | "blur" | any hex color string.
+export type BackgroundFill = "black" | "blur" | string;
 
 export type EditorStep = 1 | 2 | 3;
 

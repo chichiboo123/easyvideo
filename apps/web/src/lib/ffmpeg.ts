@@ -6,11 +6,13 @@ import type {
   Caption,
   Sticker,
   ImageOverlay,
+  Shape,
   VideoClip,
   AudioClip,
   TransitionType,
   VideoEffectType,
   AspectRatio,
+  BackgroundFill,
   ExportQuality,
 } from "@/types";
 import { resolveTransition, transitionXfadeName } from "@/lib/transitions";
@@ -18,6 +20,7 @@ import {
   renderCaptionOverlay,
   renderStickerOverlay,
   renderImageOverlay,
+  renderShapeOverlay,
   probeVideoSize,
   type RenderedOverlay,
 } from "@/lib/overlayRender";
@@ -63,11 +66,13 @@ interface ExportOptions {
   captions: Caption[];
   stickers: Sticker[];
   images?: ImageOverlay[];
+  shapes?: Shape[];
   isAudioMuted?: boolean;
   transitionType?: TransitionType;
   transitionDuration?: number;
   videoEffect?: VideoEffectType;
   aspectRatio?: AspectRatio;
+  backgroundFill?: BackgroundFill;
   quality?: ExportQuality;
   onProgress?: (ratio: number) => void;
 }
@@ -89,6 +94,84 @@ function aspectRatioSize(ratio: AspectRatio, quality: ExportQuality): { w: numbe
   }
 }
 
+// ffmpeg pad/drawbox colour from a BackgroundFill ("black" | hex like "#112233").
+function fillColorFFmpeg(bg: BackgroundFill): string {
+  if (bg === "black") return "black";
+  if (bg === "blur") return "black"; // handled separately via blurred backdrop
+  if (typeof bg === "string" && bg.startsWith("#")) return "0x" + bg.slice(1);
+  return "black";
+}
+
+function clamp(v: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+// Per-clip video filter graph: reverse → flip → colour → zoom/pan → rotate →
+// fit into the work frame with the chosen background fill → speed → fps → fade.
+// Produces a clip normalised to W×H so concat / xfade always line up, and bakes
+// transform + colour adjustments identically to the live preview.
+function buildClipVideoGraph(c: VideoClip, W: number, H: number, bg: BackgroundFill, dur: number): string {
+  const pre: string[] = [];
+  if (c.reverse) pre.push("reverse");
+  if (c.flipH) pre.push("hflip");
+  if (c.flipV) pre.push("vflip");
+  const b = (c.brightness - 100) / 100;
+  const ct = c.contrast / 100;
+  const sa = c.saturation / 100;
+  if (c.brightness !== 100 || c.contrast !== 100 || c.saturation !== 100) {
+    pre.push(`eq=brightness=${b.toFixed(3)}:contrast=${ct.toFixed(3)}:saturation=${sa.toFixed(3)}`);
+  }
+  if (c.zoom > 1) {
+    const z = c.zoom;
+    const fx = clamp(0.5 + c.offsetX / 100, 0, 1);
+    const fy = clamp(0.5 + c.offsetY / 100, 0, 1);
+    pre.push(`crop=iw/${z}:ih/${z}:(iw-iw/${z})*${fx.toFixed(4)}:(ih-ih/${z})*${fy.toFixed(4)}`);
+  }
+  if (c.rotate !== 0) {
+    const rad = (c.rotate * Math.PI) / 180;
+    pre.push(`rotate=${rad.toFixed(5)}:ow=iw:oh=ih`);
+  }
+
+  const parts: string[] = [];
+  parts.push(`[0:v]${pre.length ? pre.join(",") : "null"}[src]`);
+
+  if (bg === "blur") {
+    parts.push(`[src]split=2[s1][s2]`);
+    parts.push(`[s1]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},boxblur=20:2,setsar=1[bg]`);
+    parts.push(`[s2]scale=${W}:${H}:force_original_aspect_ratio=decrease,setsar=1[fg]`);
+    parts.push(`[bg][fg]overlay=(W-w)/2:(H-h)/2[comp]`);
+  } else {
+    const col = fillColorFFmpeg(bg);
+    parts.push(`[src]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:${col},setsar=1[comp]`);
+  }
+
+  const tail: string[] = [];
+  if (c.speed !== 1) tail.push(`setpts=${(1 / c.speed).toFixed(4)}*PTS`);
+  tail.push("fps=30", "format=yuv420p");
+  if (c.fadeIn > 0) tail.push(`fade=t=in:st=0:d=${c.fadeIn}`);
+  if (c.fadeOut > 0) tail.push(`fade=t=out:st=${Math.max(0, dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut}`);
+  parts.push(`[comp]${tail.join(",")}[outv]`);
+  return parts.join(";");
+}
+
+// Returns a plain -af chain (or "") applied to the optionally-mapped audio
+// stream. Kept separate from the video filter_complex so a clip without an
+// audio track (`-map 0:a?`) simply yields no audio instead of failing.
+function buildClipAudioFilters(c: VideoClip, dur: number): string {
+  const af: string[] = [];
+  if (c.reverse) af.push("areverse");
+  if (c.speed !== 1) {
+    let s = c.speed;
+    while (s > 2) { af.push("atempo=2.0"); s /= 2; }
+    while (s < 0.5) { af.push("atempo=0.5"); s *= 2; }
+    af.push(`atempo=${s.toFixed(4)}`);
+  }
+  if (c.volume !== 1) af.push(`volume=${c.volume.toFixed(3)}`);
+  if (c.fadeIn > 0) af.push(`afade=t=in:st=0:d=${c.fadeIn}`);
+  if (c.fadeOut > 0) af.push(`afade=t=out:st=${Math.max(0, dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut}`);
+  return af.join(",");
+}
+
 function videoEffectFilter(effect: VideoEffectType): string | null {
   switch (effect) {
     case "vintage":  return "eq=saturation=0.8:contrast=1.15:brightness=0.03,curves=vintage";
@@ -108,11 +191,13 @@ export async function exportVideo({
   captions,
   stickers,
   images = [],
+  shapes = [],
   isAudioMuted = false,
   transitionType = "none",
   transitionDuration = 0.4,
   videoEffect = "none",
   aspectRatio = "16:9",
+  backgroundFill = "black",
   quality = "720p",
   onProgress,
 }: ExportOptions): Promise<Blob> {
@@ -128,36 +213,35 @@ export async function exportVideo({
     inputNames.push(name);
   }
 
-  // ── 2. Trim + speed each clip into trim_i.mp4 ────────────────────────────
+  // ── Work size: every clip is normalised to this so concat/xfade line up and
+  // transform/crop/background-fill bake to the exact preview frame. ──────────
+  const size = aspectRatioSize(aspectRatio, quality);
+  let outW = size?.w ?? 0;
+  let outH = size?.h ?? 0;
+  if (!size) {
+    const probed = await probeVideoSize(clips[0].url);
+    outW = Math.round((probed?.w ?? 1280) / 2) * 2;
+    outH = Math.round((probed?.h ?? 720) / 2) * 2;
+  }
+
+  // ── 2. Trim + transform + colour + fill each clip into trim_i.mp4 ────────
   const trimmedNames: string[] = [];
   const trimmedDur: number[] = [];
   for (let i = 0; i < clips.length; i++) {
     const c = clips[i];
     const out = `trim_${i}.mp4`;
-    const trimArgs: string[] = ["-ss", c.inPoint.toString(), "-to", c.outPoint.toString(), "-i", inputNames[i]];
     const dur = (c.outPoint - c.inPoint) / c.speed;
     trimmedDur.push(dur);
 
-    const vf: string[] = [];
-    if (c.speed !== 1) vf.push(`setpts=${(1 / c.speed).toFixed(4)}*PTS`);
-    if (c.fadeIn > 0) vf.push(`fade=t=in:st=0:d=${c.fadeIn}`);
-    if (c.fadeOut > 0) vf.push(`fade=t=out:st=${Math.max(0, dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut}`);
+    const vGraph = buildClipVideoGraph(c, outW, outH, backgroundFill, dur);
+    const aFilters = buildClipAudioFilters(c, dur);
 
-    const af: string[] = [];
-    if (c.speed !== 1) {
-      // atempo handles 0.5x ~ 2x; chain for extremes
-      let s = c.speed;
-      while (s > 2) { af.push("atempo=2.0"); s /= 2; }
-      while (s < 0.5) { af.push("atempo=0.5"); s *= 2; }
-      af.push(`atempo=${s.toFixed(4)}`);
-    }
-    if (c.volume !== 1) af.push(`volume=${c.volume.toFixed(3)}`);
-    if (c.fadeIn > 0) af.push(`afade=t=in:st=0:d=${c.fadeIn}`);
-    if (c.fadeOut > 0) af.push(`afade=t=out:st=${Math.max(0, dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut}`);
-
-    const args: string[] = [...trimArgs];
-    if (vf.length > 0) { args.push("-vf", vf.join(",")); }
-    if (af.length > 0) { args.push("-af", af.join(",")); }
+    const args: string[] = [
+      "-ss", c.inPoint.toString(), "-to", c.outPoint.toString(), "-i", inputNames[i],
+      "-filter_complex", vGraph,
+      "-map", "[outv]", "-map", "0:a?",
+    ];
+    if (aFilters) args.push("-af", aFilters);
     args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", out);
     await instance.exec(args);
     trimmedNames.push(out);
@@ -210,19 +294,11 @@ export async function exportVideo({
     await instance.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "concat.mp4"]);
   }
 
-  // ── 4. Render overlays (captions / stickers / images) to PNG ─────────────
+  // ── 4. Render overlays (shapes / captions / stickers / images) to PNG ────
   // Done in the browser so Korean fonts, emoji, outlines and shadows are
-  // pixel-identical to the preview.
-  const size = aspectRatioSize(aspectRatio, quality);
-  let outW = size?.w ?? 0;
-  let outH = size?.h ?? 0;
-  if (!size) {
-    const probed = await probeVideoSize(clips[0].url);
-    outW = probed?.w ?? 1280;
-    outH = probed?.h ?? 720;
-  }
-
+  // pixel-identical to the preview. Shapes render first so text sits on top.
   const overlays: RenderedOverlay[] = [];
+  for (const sh of shapes) overlays.push(await renderShapeOverlay(sh, outW, outH));
   for (const c of captions) overlays.push(await renderCaptionOverlay(c, outW, outH));
   for (const s of stickers) overlays.push(await renderStickerOverlay(s, outW, outH));
   for (const img of images) {
@@ -250,12 +326,9 @@ export async function exportVideo({
 
   const fc: string[] = [];
 
-  // Base chain: aspect-ratio scaling + global effect.
+  // Base chain: the concatenated video is already at the work size with the
+  // background fill baked per clip, so only the global effect remains.
   const baseFilters: string[] = [];
-  if (size) {
-    baseFilters.push(`scale=${size.w}:${size.h}:force_original_aspect_ratio=decrease`);
-    baseFilters.push(`pad=${size.w}:${size.h}:(ow-iw)/2:(oh-ih)/2:black`);
-  }
   const effectFilter = videoEffectFilter(videoEffect);
   if (effectFilter) baseFilters.push(effectFilter);
 

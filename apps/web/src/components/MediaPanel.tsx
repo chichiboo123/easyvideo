@@ -27,7 +27,14 @@ const STICKERS = [
 ];
 
 
-type Tab = "media" | "audio" | "text" | "sticker" | "image" | "markers";
+type Tab = "media" | "audio" | "text" | "sticker" | "image" | "shape" | "markers";
+
+const SHAPE_TOOLS: { kind: "rect" | "ellipse" | "triangle" | "line"; label: string; icon: string }[] = [
+  { kind: "rect", label: "사각형", icon: "▭" },
+  { kind: "ellipse", label: "원/타원", icon: "⬭" },
+  { kind: "triangle", label: "삼각형", icon: "△" },
+  { kind: "line", label: "선", icon: "—" },
+];
 
 function formatDur(sec: number) {
   const m = Math.floor(sec / 60);
@@ -60,6 +67,7 @@ export default function MediaPanel() {
   const addCaptionsBatch = useEditorStore((s) => s.addCaptionsBatch);
   const addSticker = useEditorStore((s) => s.addSticker);
   const addImage = useEditorStore((s) => s.addImage);
+  const addShape = useEditorStore((s) => s.addShape);
   const addMarker = useEditorStore((s) => s.addMarker);
   const updateMarker = useEditorStore((s) => s.updateMarker);
   const removeMarker = useEditorStore((s) => s.removeMarker);
@@ -173,6 +181,7 @@ export default function MediaPanel() {
     { id: "text",    label: "텍스트",  icon: "T" },
     { id: "sticker", label: "스티커",  icon: "✦" },
     { id: "image",   label: "이미지",  icon: "🖼" },
+    { id: "shape",   label: "도형",    icon: "▭" },
     { id: "markers", label: "마커",    icon: "📍" },
   ];
 
@@ -436,6 +445,28 @@ export default function MediaPanel() {
             />
             <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8, lineHeight: 1.6 }}>
               미리보기에서 드래그로 위치 이동,<br/>속성 패널에서 크기·시간 조절.
+            </p>
+          </div>
+        )}
+
+        {/* ── 도형 tab ── */}
+        {tab === "shape" && (
+          <div>
+            <div className="label-row"><span>도형 추가</span><span style={{ fontSize: 10, color: "var(--text-muted)" }}>클릭하면 바로 추가</span></div>
+            <div className="shape-tool-grid">
+              {SHAPE_TOOLS.map((t) => (
+                <button key={t.kind} type="button" className="shape-tool-btn"
+                  onClick={() => addShape(t.kind)}
+                  aria-label={`${t.label} 추가`} title={`${t.label}을(를) 추가합니다`}
+                >
+                  <span className="shape-tool-icon" aria-hidden="true">{t.icon}</span>
+                  <span>{t.label}</span>
+                </button>
+              ))}
+            </div>
+            <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 10, lineHeight: 1.6 }}>
+              색상·크기·투명도는 속성 패널에서, 위치는 미리보기에서 드래그로 조절해요.<br/>
+              반투명 사각형으로 자막 배경 강조, 선으로 밑줄/분할선을 만들 수 있어요.
             </p>
           </div>
         )}

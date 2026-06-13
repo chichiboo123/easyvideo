@@ -117,9 +117,12 @@ export default function ProPreviewPanel() {
   const captions = useEditorStore((s) => s.captions);
   const stickers = useEditorStore((s) => s.stickers);
   const images = useEditorStore((s) => s.images);
+  const shapes = useEditorStore((s) => s.shapes);
+  const backgroundFill = useEditorStore((s) => s.backgroundFill);
   const selectedCaptionId = useEditorStore((s) => s.selectedCaptionId);
   const selectedStickerId = useEditorStore((s) => s.selectedStickerId);
   const selectedImageId = useEditorStore((s) => s.selectedImageId);
+  const selectedShapeId = useEditorStore((s) => s.selectedShapeId);
   const isPlaying = useEditorStore((s) => s.isPlaying);
   const currentTime = useEditorStore((s) => s.currentTime);
   const activeClipIndex = useEditorStore((s) => s.activeClipIndex);
@@ -135,12 +138,15 @@ export default function ProPreviewPanel() {
   const selectCaption = useEditorStore((s) => s.selectCaption);
   const selectSticker = useEditorStore((s) => s.selectSticker);
   const selectImage = useEditorStore((s) => s.selectImage);
+  const selectShape = useEditorStore((s) => s.selectShape);
   const updateCaption = useEditorStore((s) => s.updateCaption);
   const updateSticker = useEditorStore((s) => s.updateSticker);
   const updateImage = useEditorStore((s) => s.updateImage);
+  const updateShape = useEditorStore((s) => s.updateShape);
   const totalDuration = useEditorStore((s) => s.totalDuration);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const bgVideoRef = useRef<HTMLVideoElement>(null);
   const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
   const stageRef = useRef<HTMLDivElement>(null);
 
@@ -180,13 +186,25 @@ export default function ProPreviewPanel() {
     setSeekRequest(null);
   }, [seekRequest, setSeekRequest, activeClip]);
 
-  // Play / pause main video
+  // Play / pause main video (and the blurred backdrop copy, if any)
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     if (isPlaying) v.play().catch(() => setPlaying(false));
     else v.pause();
+    const bg = bgVideoRef.current;
+    if (bg) { if (isPlaying) bg.play().catch(() => {}); else bg.pause(); }
   }, [isPlaying, activeClipIndex, setPlaying]);
+
+  // Keep the blurred backdrop in step with the main video.
+  useEffect(() => {
+    const bg = bgVideoRef.current;
+    const v = videoRef.current;
+    if (!bg || !v) return;
+    if (Math.abs(bg.currentTime - v.currentTime) > 0.25) {
+      try { bg.currentTime = v.currentTime; } catch { /* not seekable yet */ }
+    }
+  }, [currentTime, backgroundFill]);
 
   // Multi-audio: follow the timeline. Each audio starts at its own
   // startTime offset, stays time-synced while playing or scrubbing, and is
@@ -311,21 +329,61 @@ export default function ProPreviewPanel() {
       case "cool":     return "saturate(1.05) hue-rotate(190deg)";
       case "blur":     return "blur(3px)";
       case "vignette": return "brightness(0.95) contrast(1.1)";
-      default: return "none";
+      default: return "";
     }
   }, [videoEffect]);
+
+  // Per-clip transform + colour adjustment, combined with the global effect so
+  // the preview matches what the export bakes in.
+  const clipFilter = useMemo(() => {
+    const parts: string[] = [];
+    if (previewVideoFilter) parts.push(previewVideoFilter);
+    if (activeClip) {
+      if (activeClip.brightness !== 100) parts.push(`brightness(${activeClip.brightness / 100})`);
+      if (activeClip.contrast !== 100) parts.push(`contrast(${activeClip.contrast / 100})`);
+      if (activeClip.saturation !== 100) parts.push(`saturate(${activeClip.saturation / 100})`);
+    }
+    return parts.join(" ") || "none";
+  }, [previewVideoFilter, activeClip]);
+
+  const clipTransform = useMemo(() => {
+    if (!activeClip) return "none";
+    const t: string[] = [];
+    if (activeClip.zoom !== 1) t.push(`scale(${activeClip.zoom})`);
+    if (activeClip.offsetX !== 0 || activeClip.offsetY !== 0) t.push(`translate(${activeClip.offsetX}%, ${activeClip.offsetY}%)`);
+    if (activeClip.rotate !== 0) t.push(`rotate(${activeClip.rotate}deg)`);
+    if (activeClip.flipH) t.push("scaleX(-1)");
+    if (activeClip.flipV) t.push("scaleY(-1)");
+    return t.join(" ") || "none";
+  }, [activeClip]);
+
+  // Letterbox/pillarbox fill behind the contained video.
+  const frameBg = backgroundFill === "blur" || backgroundFill === "black"
+    ? "#000"
+    : backgroundFill;
 
   return (
     <section className="preview-panel" aria-label="미리보기">
       <div className="preview-stage" ref={stageRef}>
-        <div className="preview-frame" style={aspectStyle}>
+        <div className="preview-frame" style={{ ...aspectStyle, background: frameBg }}>
+          {activeClip && backgroundFill === "blur" && (
+            <video
+              ref={bgVideoRef}
+              key={`bg-${activeClip.url}`}
+              src={activeClip.url}
+              className="preview-bg-fill"
+              muted
+              playsInline
+              aria-hidden="true"
+            />
+          )}
           {activeClip ? (
             <video
               ref={videoRef}
               key={activeClip.url}
               src={activeClip.url}
               className="preview-video"
-              style={{ filter: previewVideoFilter }}
+              style={{ filter: clipFilter, transform: clipTransform }}
               onTimeUpdate={handleTimeUpdate}
               onEnded={handleEnded}
               playsInline
@@ -345,6 +403,10 @@ export default function ProPreviewPanel() {
             <div className="overlay-vignette" aria-hidden="true" />
           )}
 
+          {activeClip?.reverse && (
+            <div className="preview-badge" aria-label="역재생 클립">⏪ 역재생 (내보낼 때 적용)</div>
+          )}
+
           {/* Transition preview overlay (visual cue at clip boundaries) */}
           {transitionState && activeClip && (
             <>
@@ -358,6 +420,62 @@ export default function ProPreviewPanel() {
               </div>
             </>
           )}
+
+          {/* Shapes (rendered beneath text so captions stay readable) */}
+          {shapes
+            .filter((sh) => currentTime >= sh.startTime && currentTime <= sh.endTime)
+            .map((sh) => {
+              const op = getSimpleAnim(
+                currentTime, sh.startTime, sh.endTime,
+                sh.animationIn !== "none" ? "fade" : "none",
+                sh.animationOut !== "none" ? "fade" : "none",
+                sh.animationDuration,
+              ) * sh.opacity;
+              const common: React.CSSProperties = {
+                position: "absolute",
+                left: `${sh.x}%`, top: `${sh.y}%`,
+                width: `${sh.width}%`, height: `${sh.height}%`,
+                transform: `translate(-50%,-50%) rotate(${sh.rotation}deg)`,
+                opacity: op,
+                cursor: "move",
+                boxSizing: "border-box",
+                outline: selectedShapeId === sh.id ? "2px dashed var(--accent)" : "none",
+                outlineOffset: 2,
+              };
+              const fill = sh.fillColor !== "transparent" ? sh.fillColor : "transparent";
+              const border = sh.strokeWidth > 0 && sh.strokeColor !== "transparent" ? `${sh.strokeWidth}px solid ${sh.strokeColor}` : undefined;
+              let style: React.CSSProperties = { ...common, background: fill, border };
+              if (sh.kind === "ellipse") style.borderRadius = "50%";
+              if (sh.kind === "triangle") { style.clipPath = "polygon(50% 0, 100% 100%, 0 100%)"; style.border = undefined; }
+              if (sh.kind === "line") {
+                style = { ...common, background: sh.strokeColor !== "transparent" ? sh.strokeColor : "#fff",
+                  height: `${Math.max(sh.strokeWidth, 2) / 7.2}%`, borderRadius: 999 };
+              }
+              return (
+                <div key={sh.id} style={style}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    const stage = e.currentTarget.parentElement;
+                    if (!stage) return;
+                    const rect = stage.getBoundingClientRect();
+                    const onMove = (ev: MouseEvent) => {
+                      updateShape(sh.id, {
+                        x: Math.max(0, Math.min(100, ((ev.clientX - rect.left) / rect.width) * 100)),
+                        y: Math.max(0, Math.min(100, ((ev.clientY - rect.top) / rect.height) * 100)),
+                      });
+                    };
+                    const onUp = () => {
+                      window.removeEventListener("mousemove", onMove);
+                      window.removeEventListener("mouseup", onUp);
+                    };
+                    selectShape(sh.id);
+                    window.addEventListener("mousemove", onMove);
+                    window.addEventListener("mouseup", onUp);
+                  }}
+                  data-selected={selectedShapeId === sh.id}
+                />
+              );
+            })}
 
           {/* Captions */}
           {captions

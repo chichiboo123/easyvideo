@@ -50,6 +50,8 @@ export default function Toolbar({ onExport, onShowShortcuts }: ToolbarProps) {
   const canRedo = useEditorStore((s) => s.canRedo());
   const aspectRatio = useEditorStore((s) => s.aspectRatio);
   const setAspectRatio = useEditorStore((s) => s.setAspectRatio);
+  const backgroundFill = useEditorStore((s) => s.backgroundFill);
+  const setBackgroundFill = useEditorStore((s) => s.setBackgroundFill);
   const resetProject = useEditorStore((s) => s.resetProject);
   const hydrateFromJSON = useEditorStore((s) => s.hydrateFromJSON);
 
@@ -180,6 +182,30 @@ export default function Toolbar({ onExport, onShowShortcuts }: ToolbarProps) {
           <option value="original">원본</option>
         </select>
       </label>
+
+      {/* Background fill for letterbox bars */}
+      <label className="tb-select-wrap" title="여백(레터박스) 배경 채우기">
+        <span className="visually-hidden">배경 채우기</span>
+        <select
+          className="tb-select"
+          aria-label="배경 채우기"
+          value={backgroundFill === "black" ? "black" : backgroundFill === "blur" ? "blur" : "color"}
+          onChange={(e) => {
+            const v = e.target.value;
+            setBackgroundFill(v === "black" ? "black" : v === "blur" ? "blur" : "#202840");
+          }}
+        >
+          <option value="black">배경: 검정</option>
+          <option value="blur">배경: 블러</option>
+          <option value="color">배경: 색상</option>
+        </select>
+      </label>
+      {backgroundFill !== "black" && backgroundFill !== "blur" && (
+        <input type="color" className="tb-color-input"
+          value={backgroundFill.startsWith("#") ? backgroundFill : "#202840"}
+          onChange={(e) => setBackgroundFill(e.target.value)}
+          aria-label="배경 색상" title="배경 색상 선택" />
+      )}
 
       {/* Lock / mute */}
       <div className="tb-group">
