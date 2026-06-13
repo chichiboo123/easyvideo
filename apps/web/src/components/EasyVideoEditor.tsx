@@ -25,14 +25,17 @@ export default function EasyVideoEditor() {
   const selectedCaptionId = useEditorStore((s) => s.selectedCaptionId);
   const selectedStickerId = useEditorStore((s) => s.selectedStickerId);
   const selectedImageId = useEditorStore((s) => s.selectedImageId);
+  const selectedShapeId = useEditorStore((s) => s.selectedShapeId);
   const removeVideoClip = useEditorStore((s) => s.removeVideoClip);
   const removeCaption = useEditorStore((s) => s.removeCaption);
   const removeSticker = useEditorStore((s) => s.removeSticker);
   const removeImage = useEditorStore((s) => s.removeImage);
+  const removeShape = useEditorStore((s) => s.removeShape);
   const duplicateVideoClip = useEditorStore((s) => s.duplicateVideoClip);
   const duplicateCaption = useEditorStore((s) => s.duplicateCaption);
   const duplicateSticker = useEditorStore((s) => s.duplicateSticker);
   const duplicateImage = useEditorStore((s) => s.duplicateImage);
+  const duplicateShape = useEditorStore((s) => s.duplicateShape);
   const setTimelineZoom = useEditorStore((s) => s.setTimelineZoom);
   const timelineZoom = useEditorStore((s) => s.timelineZoom);
   const undo = useEditorStore((s) => s.undo);
@@ -90,6 +93,7 @@ export default function EasyVideoEditor() {
     const hasContent =
       (p.captions?.length ?? 0) > 0 ||
       (p.stickers?.length ?? 0) > 0 ||
+      (p.shapes?.length ?? 0) > 0 ||
       (p.markers?.length ?? 0) > 0;
     if (!hasContent) return;
     if (useEditorStore.getState().videoClips.length > 0) return;
@@ -142,6 +146,7 @@ export default function EasyVideoEditor() {
             else if (selectedCaptionId) duplicateCaption(selectedCaptionId);
             else if (selectedStickerId) duplicateSticker(selectedStickerId);
             else if (selectedImageId) duplicateImage(selectedImageId);
+            else if (selectedShapeId) duplicateShape(selectedShapeId);
           }
           break;
         case " ":
@@ -193,6 +198,7 @@ export default function EasyVideoEditor() {
           if (selectedCaptionId) { removeCaption(selectedCaptionId); deleted = "자막"; }
           if (selectedStickerId) { removeSticker(selectedStickerId); deleted = "스티커"; }
           if (selectedImageId) { removeImage(selectedImageId); deleted = "이미지"; }
+          if (selectedShapeId) { removeShape(selectedShapeId); deleted = "도형"; }
           if (deleted) {
             toast({ message: `${deleted}을(를) 삭제했어요`, type: "info",
               action: { label: "되돌리기", run: () => useEditorStore.getState().undo() } });
@@ -219,6 +225,7 @@ export default function EasyVideoEditor() {
     selectedCaptionId, removeCaption, duplicateCaption,
     selectedStickerId, removeSticker, duplicateSticker,
     selectedImageId, removeImage, duplicateImage,
+    selectedShapeId, removeShape, duplicateShape,
     timelineZoom, setTimelineZoom,
     undo, redo, isVideoTrackLocked,
     addMarker, currentTime, totalDuration,

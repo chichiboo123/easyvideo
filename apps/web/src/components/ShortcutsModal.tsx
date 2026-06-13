@@ -56,6 +56,17 @@ export default function ShortcutsModal({ onClose }: Props) {
         </section>
 
         <section className="help-section">
+          <h3 className="help-section-title">✨ 클립 변형 · 색 보정 · 배경</h3>
+          <p className="help-note">
+            비디오 클립을 선택하면 속성 패널에서 <strong>확대·위치·회전·좌우/상하 반전·역재생</strong>과
+            <strong> 밝기·대비·채도</strong>를 클립별로 조절할 수 있어요. 미리보기와 내보내기 결과가 동일합니다.
+            상단 도구막대의 <strong>배경 채우기</strong>로 9:16·1:1 등에서 생기는 여백을
+            <strong> 검정·블러·색상</strong>으로 채울 수 있어 쇼츠 제작에 좋아요.
+            왼쪽 <strong>도형</strong> 탭에서 사각형·원·삼각형·선을 올려 강조 박스나 밑줄도 만들 수 있습니다.
+          </p>
+        </section>
+
+        <section className="help-section">
           <h3 className="help-section-title">💡 전환 효과 사용 안내</h3>
           <p className="help-note">
             전환 효과는 <strong>이어진 클립 사이</strong> — 앞 클립의 <em>끝</em>과 뒤 클립의 <em>시작</em>이

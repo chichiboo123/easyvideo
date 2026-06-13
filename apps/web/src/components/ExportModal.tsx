@@ -15,11 +15,13 @@ export default function ExportModal({ onClose }: ExportModalProps) {
   const captions = useEditorStore((s) => s.captions);
   const stickers = useEditorStore((s) => s.stickers);
   const images = useEditorStore((s) => s.images);
+  const shapes = useEditorStore((s) => s.shapes);
   const isAudioMuted = useEditorStore((s) => s.isAudioMuted);
   const transitionType = useEditorStore((s) => s.transitionType);
   const transitionDuration = useEditorStore((s) => s.transitionDuration);
   const videoEffect = useEditorStore((s) => s.videoEffect);
   const aspectRatio = useEditorStore((s) => s.aspectRatio);
+  const backgroundFill = useEditorStore((s) => s.backgroundFill);
 
   const [quality, setQuality] = useState<ExportQuality>("720p");
   const [phase, setPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -36,10 +38,10 @@ export default function ExportModal({ onClose }: ExportModalProps) {
       const blob = await exportVideo({
         clips: videoClips,
         audios: audioClips,
-        captions, stickers, images,
+        captions, stickers, images, shapes,
         isAudioMuted,
         transitionType, transitionDuration,
-        videoEffect, aspectRatio,
+        videoEffect, aspectRatio, backgroundFill,
         quality,
         onProgress: (r) => {
           setProgress(Math.min(1, Math.max(0, r)));

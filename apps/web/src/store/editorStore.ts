@@ -12,6 +12,9 @@ import type {
   VideoEffectType,
   AspectRatio,
   Marker,
+  Shape,
+  ShapeKind,
+  BackgroundFill,
 } from "@/types";
 
 interface EditorState {
@@ -24,6 +27,7 @@ interface EditorState {
   captions: Caption[];
   stickers: Sticker[];
   images: ImageOverlay[];
+  shapes: Shape[];
   markers: Marker[];
 
   // selection
@@ -31,6 +35,7 @@ interface EditorState {
   selectedCaptionId: string | null;
   selectedStickerId: string | null;
   selectedImageId: string | null;
+  selectedShapeId: string | null;
   selectedAudioId: string | null;
 
   // playback
@@ -52,6 +57,7 @@ interface EditorState {
   transitionDuration: number;
   videoEffect: VideoEffectType;
   aspectRatio: AspectRatio;
+  backgroundFill: BackgroundFill;
   snapEnabled: boolean;
 
   // ── actions ───────────────────────────────────────────────────────────────
@@ -90,6 +96,12 @@ interface EditorState {
   duplicateImage: (id: string) => void;
   removeImage: (id: string) => void;
 
+  // shapes
+  addShape: (kind: ShapeKind) => void;
+  updateShape: (id: string, patch: Partial<Shape>) => void;
+  duplicateShape: (id: string) => void;
+  removeShape: (id: string) => void;
+
   // markers
   addMarker: (label?: string) => void;
   updateMarker: (id: string, patch: Partial<Marker>) => void;
@@ -100,6 +112,7 @@ interface EditorState {
   selectCaption: (id: string | null) => void;
   selectSticker: (id: string | null) => void;
   selectImage: (id: string | null) => void;
+  selectShape: (id: string | null) => void;
   selectAudio: (id: string | null) => void;
   clearSelection: () => void;
   setCurrentTime: (t: number) => void;
@@ -120,6 +133,7 @@ interface EditorState {
   setTransitionDuration: (d: number) => void;
   setVideoEffect: (e: VideoEffectType) => void;
   setAspectRatio: (a: AspectRatio) => void;
+  setBackgroundFill: (f: BackgroundFill) => void;
 
   // history
   undo: () => void;
@@ -143,6 +157,7 @@ interface EditorSnapshot {
   captions: Caption[];
   stickers: Sticker[];
   images: ImageOverlay[];
+  shapes: Shape[];
   markers: Marker[];
 }
 
@@ -199,13 +214,45 @@ export function defaultVideoClip(partial: Partial<VideoClip> & { id?: string; na
     volume: partial.volume ?? 1,
     fadeIn: partial.fadeIn ?? 0,
     fadeOut: partial.fadeOut ?? 0,
+    zoom: partial.zoom ?? 1,
+    offsetX: partial.offsetX ?? 0,
+    offsetY: partial.offsetY ?? 0,
+    rotate: partial.rotate ?? 0,
+    flipH: partial.flipH ?? false,
+    flipV: partial.flipV ?? false,
+    brightness: partial.brightness ?? 100,
+    contrast: partial.contrast ?? 100,
+    saturation: partial.saturation ?? 100,
+    reverse: partial.reverse ?? false,
     transitionAfter: partial.transitionAfter ?? null,
   };
 }
 
 const EMPTY: EditorSnapshot = {
-  videoClips: [], audioClips: [], captions: [], stickers: [], images: [], markers: [],
+  videoClips: [], audioClips: [], captions: [], stickers: [], images: [], shapes: [], markers: [],
 };
+
+export function defaultShape(partial: Partial<Shape> & { kind: ShapeKind }): Shape {
+  const isLine = partial.kind === "line";
+  return {
+    id: partial.id ?? uid(),
+    kind: partial.kind,
+    x: partial.x ?? 50,
+    y: partial.y ?? 50,
+    width: partial.width ?? 30,
+    height: partial.height ?? (isLine ? 2 : 22),
+    rotation: partial.rotation ?? 0,
+    fillColor: partial.fillColor ?? (isLine ? "transparent" : "#3D8BFF"),
+    strokeColor: partial.strokeColor ?? (isLine ? "#FFFFFF" : "#FFFFFF"),
+    strokeWidth: partial.strokeWidth ?? (isLine ? 6 : 0),
+    opacity: partial.opacity ?? 1,
+    startTime: partial.startTime ?? 0,
+    endTime: partial.endTime ?? 3,
+    animationIn: partial.animationIn ?? "fade",
+    animationOut: partial.animationOut ?? "fade",
+    animationDuration: partial.animationDuration ?? 0.4,
+  };
+}
 
 export const useEditorStore = create<EditorState>((set, get) => ({
   historyPast: [],
@@ -215,12 +262,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   captions: [],
   stickers: [],
   images: [],
+  shapes: [],
   markers: [],
 
   selectedClipId: null,
   selectedCaptionId: null,
   selectedStickerId: null,
   selectedImageId: null,
+  selectedShapeId: null,
   selectedAudioId: null,
 
   currentTime: 0,
@@ -239,6 +288,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   transitionDuration: 0.4,
   videoEffect: "none",
   aspectRatio: "16:9",
+  backgroundFill: "black",
   snapEnabled: true,
 
   // ── video clips ───────────────────────────────────────────────────────────
@@ -407,7 +457,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         historyFuture: [],
         captions: [...state.captions, cap],
         selectedCaptionId: cap.id,
-        selectedClipId: null, selectedStickerId: null, selectedImageId: null, selectedAudioId: null,
+        selectedClipId: null, selectedStickerId: null, selectedImageId: null, selectedShapeId: null, selectedAudioId: null,
       };
     }),
 
@@ -495,7 +545,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         historyFuture: [],
         stickers: [...state.stickers, sticker],
         selectedStickerId: sticker.id,
-        selectedClipId: null, selectedCaptionId: null, selectedImageId: null, selectedAudioId: null,
+        selectedClipId: null, selectedCaptionId: null, selectedImageId: null, selectedShapeId: null, selectedAudioId: null,
       };
     }),
 
@@ -545,7 +595,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         historyFuture: [],
         images: [...state.images, img],
         selectedImageId: img.id,
-        selectedClipId: null, selectedCaptionId: null, selectedStickerId: null, selectedAudioId: null,
+        selectedClipId: null, selectedCaptionId: null, selectedStickerId: null, selectedShapeId: null, selectedAudioId: null,
       };
     }),
 
@@ -575,6 +625,52 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       historyFuture: [],
       images: state.images.filter((img) => img.id !== id),
       selectedImageId: state.selectedImageId === id ? null : state.selectedImageId,
+    })),
+
+  // ── shapes ────────────────────────────────────────────────────────────────
+
+  addShape: (kind) =>
+    set((state) => {
+      const shape = defaultShape({
+        kind,
+        startTime: get().currentTime,
+        endTime: Math.min(get().currentTime + 3, get().totalDuration() || 5),
+      });
+      return {
+        historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+        historyFuture: [],
+        shapes: [...state.shapes, shape],
+        selectedShapeId: shape.id,
+        selectedClipId: null, selectedCaptionId: null, selectedStickerId: null, selectedImageId: null, selectedAudioId: null,
+      };
+    }),
+
+  updateShape: (id, patch) =>
+    set((state) => ({
+      historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+      historyFuture: [],
+      shapes: state.shapes.map((sh) => (sh.id === id ? { ...sh, ...patch } : sh)),
+    })),
+
+  duplicateShape: (id) =>
+    set((state) => {
+      const orig = state.shapes.find((sh) => sh.id === id);
+      if (!orig) return {};
+      const copy: Shape = { ...orig, id: uid(), x: Math.min(100, orig.x + 6), y: Math.min(100, orig.y + 6) };
+      return {
+        historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+        historyFuture: [],
+        shapes: [...state.shapes, copy],
+        selectedShapeId: copy.id,
+      };
+    }),
+
+  removeShape: (id) =>
+    set((state) => ({
+      historyPast: pushHistory(state.historyPast, snapshotOf(state)),
+      historyFuture: [],
+      shapes: state.shapes.filter((sh) => sh.id !== id),
+      selectedShapeId: state.selectedShapeId === id ? null : state.selectedShapeId,
     })),
 
   // ── markers ───────────────────────────────────────────────────────────────
@@ -611,17 +707,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   // ── selection / playback ──────────────────────────────────────────────────
 
   selectClip: (id) =>
-    set({ selectedClipId: id, selectedCaptionId: null, selectedStickerId: null, selectedImageId: null, selectedAudioId: null }),
+    set({ selectedClipId: id, selectedCaptionId: null, selectedStickerId: null, selectedImageId: null, selectedShapeId: null, selectedAudioId: null }),
   selectCaption: (id) =>
-    set({ selectedCaptionId: id, selectedClipId: null, selectedStickerId: null, selectedImageId: null, selectedAudioId: null }),
+    set({ selectedCaptionId: id, selectedClipId: null, selectedStickerId: null, selectedImageId: null, selectedShapeId: null, selectedAudioId: null }),
   selectSticker: (id) =>
-    set({ selectedStickerId: id, selectedClipId: null, selectedCaptionId: null, selectedImageId: null, selectedAudioId: null }),
+    set({ selectedStickerId: id, selectedClipId: null, selectedCaptionId: null, selectedImageId: null, selectedShapeId: null, selectedAudioId: null }),
   selectImage: (id) =>
-    set({ selectedImageId: id, selectedClipId: null, selectedCaptionId: null, selectedStickerId: null, selectedAudioId: null }),
+    set({ selectedImageId: id, selectedClipId: null, selectedCaptionId: null, selectedStickerId: null, selectedShapeId: null, selectedAudioId: null }),
+  selectShape: (id) =>
+    set({ selectedShapeId: id, selectedClipId: null, selectedCaptionId: null, selectedStickerId: null, selectedImageId: null, selectedAudioId: null }),
   selectAudio: (id) =>
-    set({ selectedAudioId: id, selectedClipId: null, selectedCaptionId: null, selectedStickerId: null, selectedImageId: null }),
+    set({ selectedAudioId: id, selectedClipId: null, selectedCaptionId: null, selectedStickerId: null, selectedImageId: null, selectedShapeId: null }),
   clearSelection: () =>
-    set({ selectedClipId: null, selectedCaptionId: null, selectedStickerId: null, selectedImageId: null, selectedAudioId: null }),
+    set({ selectedClipId: null, selectedCaptionId: null, selectedStickerId: null, selectedImageId: null, selectedShapeId: null, selectedAudioId: null }),
 
   setCurrentTime: (t) => set({ currentTime: t }),
   setPlaying: (p) => set({ isPlaying: p }),
@@ -642,6 +740,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setTransitionDuration: (d) => set({ transitionDuration: Math.max(0.2, Math.min(2.0, d)) }),
   setVideoEffect: (e) => set({ videoEffect: e }),
   setAspectRatio: (a) => set({ aspectRatio: a }),
+  setBackgroundFill: (f) => set({ backgroundFill: f }),
 
   undo: () =>
     set((state) => {
@@ -679,7 +778,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       historyPast: pushHistory(state.historyPast, snapshotOf(state)),
       historyFuture: [],
       ...EMPTY,
-      selectedClipId: null, selectedCaptionId: null, selectedStickerId: null, selectedImageId: null, selectedAudioId: null,
+      selectedClipId: null, selectedCaptionId: null, selectedStickerId: null, selectedImageId: null, selectedShapeId: null, selectedAudioId: null,
       currentTime: 0, isPlaying: false, activeClipIndex: 0, seekRequest: null,
     })),
 
@@ -697,11 +796,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       captions: Array.isArray(project.captions) ? project.captions.map(migrateCaption) : [],
       stickers: Array.isArray(project.stickers) ? project.stickers.map(migrateSticker) : [],
       images: Array.isArray(project.images) ? project.images.map(migrateImage) : [],
+      shapes: Array.isArray(project.shapes) ? project.shapes.map(migrateShape) : [],
       markers: Array.isArray(project.markers) ? project.markers : [],
       transitionType: project.transitionType ?? "none",
       transitionDuration: project.transitionDuration ?? 0.4,
       videoEffect: project.videoEffect ?? "none",
       aspectRatio: project.aspectRatio ?? "16:9",
+      backgroundFill: project.backgroundFill ?? "black",
       isAudioMuted: project.isAudioMuted ?? false,
       isVideoTrackLocked: project.isVideoTrackLocked ?? false,
       timelineZoom: project.timelineZoom ?? 80,
@@ -739,6 +840,16 @@ function migrateVideoClip(v: any): VideoClip {
     volume: v.volume ?? 1,
     fadeIn: v.fadeIn ?? 0,
     fadeOut: v.fadeOut ?? 0,
+    zoom: v.zoom ?? 1,
+    offsetX: v.offsetX ?? 0,
+    offsetY: v.offsetY ?? 0,
+    rotate: v.rotate ?? 0,
+    flipH: v.flipH ?? false,
+    flipV: v.flipV ?? false,
+    brightness: v.brightness ?? 100,
+    contrast: v.contrast ?? 100,
+    saturation: v.saturation ?? 100,
+    reverse: v.reverse ?? false,
     transitionAfter: v.transitionAfter ?? null,
   });
 }
@@ -755,6 +866,15 @@ function migrateSticker(s: any): Sticker {
     animationDuration: s.animationDuration ?? 0.4,
   };
 }
+function migrateShape(sh: any): Shape {
+  return defaultShape({
+    id: sh.id, kind: sh.kind ?? "rect",
+    x: sh.x, y: sh.y, width: sh.width, height: sh.height, rotation: sh.rotation,
+    fillColor: sh.fillColor, strokeColor: sh.strokeColor, strokeWidth: sh.strokeWidth,
+    opacity: sh.opacity, startTime: sh.startTime, endTime: sh.endTime,
+    animationIn: sh.animationIn, animationOut: sh.animationOut, animationDuration: sh.animationDuration,
+  });
+}
 function migrateImage(i: any): ImageOverlay {
   return {
     id: i.id ?? uid(),
@@ -766,13 +886,14 @@ function migrateImage(i: any): ImageOverlay {
   };
 }
 
-function snapshotOf(state: Pick<EditorState, "videoClips" | "audioClips" | "captions" | "stickers" | "images" | "markers">): EditorSnapshot {
+function snapshotOf(state: Pick<EditorState, "videoClips" | "audioClips" | "captions" | "stickers" | "images" | "shapes" | "markers">): EditorSnapshot {
   return {
     videoClips: structuredClone(state.videoClips),
     audioClips: structuredClone(state.audioClips),
     captions: structuredClone(state.captions),
     stickers: structuredClone(state.stickers),
     images: structuredClone(state.images),
+    shapes: structuredClone(state.shapes),
     markers: structuredClone(state.markers),
   };
 }

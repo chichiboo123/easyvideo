@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useEditorStore } from "@/store/editorStore";
 import { TRANSITIONS, TRANSITION_GROUPS, transitionLabel, resolveTransition } from "@/lib/transitions";
+import Waveform from "./Waveform";
 import type { TransitionType } from "@/types";
 
 function formatTime(sec: number) {
@@ -37,6 +38,7 @@ export default function ProTimeline() {
   const captions = useEditorStore((s) => s.captions);
   const stickers = useEditorStore((s) => s.stickers);
   const images = useEditorStore((s) => s.images);
+  const shapes = useEditorStore((s) => s.shapes);
   const markers = useEditorStore((s) => s.markers);
   const currentTime = useEditorStore((s) => s.currentTime);
   const isPlaying = useEditorStore((s) => s.isPlaying);
@@ -44,6 +46,7 @@ export default function ProTimeline() {
   const selectedCaptionId = useEditorStore((s) => s.selectedCaptionId);
   const selectedStickerId = useEditorStore((s) => s.selectedStickerId);
   const selectedImageId = useEditorStore((s) => s.selectedImageId);
+  const selectedShapeId = useEditorStore((s) => s.selectedShapeId);
   const selectedAudioId = useEditorStore((s) => s.selectedAudioId);
   const timelineZoom = useEditorStore((s) => s.timelineZoom);
   const totalDuration = useEditorStore((s) => s.totalDuration);
@@ -61,9 +64,11 @@ export default function ProTimeline() {
   const selectCaption = useEditorStore((s) => s.selectCaption);
   const selectSticker = useEditorStore((s) => s.selectSticker);
   const selectImage = useEditorStore((s) => s.selectImage);
+  const selectShape = useEditorStore((s) => s.selectShape);
   const selectAudio = useEditorStore((s) => s.selectAudio);
   const updateCaption = useEditorStore((s) => s.updateCaption);
   const updateImage = useEditorStore((s) => s.updateImage);
+  const updateShape = useEditorStore((s) => s.updateShape);
   const updateSticker = useEditorStore((s) => s.updateSticker);
   const updateVideoClip = useEditorStore((s) => s.updateVideoClip);
   const updateAudioClip = useEditorStore((s) => s.updateAudioClip);
@@ -473,7 +478,8 @@ export default function ProTimeline() {
                       aria-label={`${a.name} 오디오`}
                       title={`${a.name} — 드래그로 시작 위치 이동`}
                     >
-                      <span className="clip-label">🎵 {a.name}</span>
+                      {a.url && <Waveform url={a.url} width={width} height={32} />}
+                      <span className="clip-label" style={{ position: "relative" }}>🎵 {a.name}</span>
                     </div>
                   );
                 })}
@@ -588,6 +594,64 @@ export default function ProTimeline() {
                         e.preventDefault(); e.stopPropagation();
                         const startX = e.clientX; const end = img.endTime;
                         const onMove = (ev: MouseEvent) => updateImage(img.id, { endTime: Math.max(img.startTime + 0.1, applySnap(end + (ev.clientX - startX) / pxPerSec, end)) });
+                        const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                        window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+                      }} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Shape overlay track */}
+          {shapes.length > 0 && (
+            <div className="track-row" onClick={handleTrackClick} aria-label="도형 트랙">
+              <div className="track-header">
+                <span style={{ fontSize: 14 }} aria-hidden="true">▭</span>
+                도형
+              </div>
+              <div className="track-body">
+                {shapes.map((sh) => {
+                  const left = sh.startTime * pxPerSec;
+                  const width = Math.max((sh.endTime - sh.startTime) * pxPerSec - 2, 30);
+                  const label = sh.kind === "rect" ? "사각형" : sh.kind === "ellipse" ? "원" : sh.kind === "triangle" ? "삼각형" : "선";
+                  return (
+                    <div key={sh.id}
+                      className={`clip-block clip-shape ${selectedShapeId === sh.id ? "selected" : ""}`}
+                      style={{ left, width }}
+                      onClick={(e) => { e.stopPropagation(); selectShape(sh.id); }}
+                      onMouseDown={(e) => {
+                        if ((e.target as HTMLElement).closest(".clip-edge-handle")) return;
+                        const startX = e.clientX;
+                        const origStart = sh.startTime;
+                        const len = sh.endTime - sh.startTime;
+                        let moved = false;
+                        const onMove = (ev: MouseEvent) => {
+                          if (Math.abs(ev.clientX - startX) > 3) moved = true;
+                          if (!moved) return;
+                          const next = Math.max(0, applySnap(origStart + (ev.clientX - startX) / pxPerSec, origStart));
+                          updateShape(sh.id, { startTime: next, endTime: next + len });
+                        };
+                        const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                        window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+                      }}
+                      role="button" tabIndex={0}
+                      aria-label={`도형: ${label}`}
+                      title={`${label} — 본체 드래그로 이동, 양 끝 드래그로 길이 조절`}
+                    >
+                      <span className="clip-label">▭ {label}</span>
+                      <span className="clip-edge-handle left" onMouseDown={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        const startX = e.clientX; const start = sh.startTime;
+                        const onMove = (ev: MouseEvent) => updateShape(sh.id, { startTime: Math.max(0, Math.min(sh.endTime - 0.1, applySnap(start + (ev.clientX - startX) / pxPerSec, start))) });
+                        const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                        window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+                      }} />
+                      <span className="clip-edge-handle right" onMouseDown={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        const startX = e.clientX; const end = sh.endTime;
+                        const onMove = (ev: MouseEvent) => updateShape(sh.id, { endTime: Math.max(sh.startTime + 0.1, applySnap(end + (ev.clientX - startX) / pxPerSec, end)) });
                         const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
                         window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
                       }} />

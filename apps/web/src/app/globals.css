@@ -204,6 +204,16 @@ button, select, input, textarea {
 }
 .tb-select:hover { background-color: var(--bg-hover); }
 
+.tb-color-input {
+  width: 30px;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  cursor: pointer;
+}
+
 .toolbar-spacer { flex: 1; }
 
 .btn-export {
@@ -504,6 +514,30 @@ button, select, input, textarea {
 }
 .sticker-btn-pro:hover { background: var(--bg-hover); transform: scale(1.1); }
 
+/* Shape tools */
+.shape-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-top: 4px;
+}
+.shape-tool-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, transform 0.1s;
+}
+.shape-tool-btn:hover { background: var(--bg-hover); border-color: var(--accent); transform: translateY(-1px); }
+.shape-tool-icon { font-size: 26px; line-height: 1; color: var(--text-primary); }
+
 /* ── Preview panel (center) ─────────────────────────────────────────── */
 .preview-panel {
   grid-area: preview;
@@ -548,6 +582,35 @@ button, select, input, textarea {
   height: 100%;
   object-fit: contain;
   display: block;
+  position: relative;
+  z-index: 1;
+}
+
+/* Blurred backdrop that fills the letterbox bars (CapCut-style). */
+.preview-bg-fill {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(24px) brightness(0.7);
+  transform: scale(1.12);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.preview-badge {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 6;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  pointer-events: none;
 }
 
 .overlay-vignette {
@@ -1013,6 +1076,7 @@ button, select, input, textarea {
 .clip-audio { background: linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%); }
 .clip-text  { background: linear-gradient(135deg, #92400e 0%, #b45309 100%); }
 .clip-sticker { background: linear-gradient(135deg, #065f46 0%, #047857 100%); }
+.clip-shape { background: linear-gradient(135deg, #0e7490 0%, #0891b2 100%); }
 
 .clip-label {
   font-size: 11px;

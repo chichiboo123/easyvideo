@@ -1,6 +1,6 @@
 "use client";
 
-import type { Caption, Sticker, ImageOverlay } from "@/types";
+import type { Caption, Sticker, ImageOverlay, Shape } from "@/types";
 
 // Renders captions / stickers / image overlays into full-frame transparent
 // PNGs with the browser's canvas, so the exported video keeps the exact
@@ -138,6 +138,60 @@ export async function renderStickerOverlay(s: Sticker, w: number, h: number): Pr
     endTime: s.endTime,
     fadeIn: s.animationIn !== "none" ? s.animationDuration : 0,
     fadeOut: s.animationOut !== "none" ? s.animationDuration : 0,
+  };
+}
+
+export async function renderShapeOverlay(sh: Shape, w: number, h: number): Promise<RenderedOverlay> {
+  const scale = h / REF_HEIGHT;
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+
+  const dw = (sh.width / 100) * w;
+  const dh = (sh.height / 100) * h;
+  ctx.translate((sh.x / 100) * w, (sh.y / 100) * h);
+  ctx.rotate((sh.rotation * Math.PI) / 180);
+  ctx.globalAlpha = Math.max(0, Math.min(1, sh.opacity));
+
+  const hasFill = sh.fillColor && sh.fillColor !== "transparent";
+  const hasStroke = sh.strokeWidth > 0 && sh.strokeColor && sh.strokeColor !== "transparent";
+  ctx.fillStyle = hasFill ? sh.fillColor : "transparent";
+  ctx.strokeStyle = hasStroke ? sh.strokeColor : "transparent";
+  ctx.lineWidth = sh.strokeWidth * scale;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  if (sh.kind === "rect") {
+    ctx.beginPath();
+    ctx.rect(-dw / 2, -dh / 2, dw, dh);
+    if (hasFill) ctx.fill();
+    if (hasStroke) ctx.stroke();
+  } else if (sh.kind === "ellipse") {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, dw / 2, dh / 2, 0, 0, Math.PI * 2);
+    if (hasFill) ctx.fill();
+    if (hasStroke) ctx.stroke();
+  } else if (sh.kind === "triangle") {
+    ctx.beginPath();
+    ctx.moveTo(0, -dh / 2);
+    ctx.lineTo(dw / 2, dh / 2);
+    ctx.lineTo(-dw / 2, dh / 2);
+    ctx.closePath();
+    if (hasFill) ctx.fill();
+    if (hasStroke) ctx.stroke();
+  } else { // line
+    ctx.beginPath();
+    ctx.moveTo(-dw / 2, 0);
+    ctx.lineTo(dw / 2, 0);
+    ctx.stroke();
+  }
+
+  return {
+    png: await canvasToPng(canvas),
+    startTime: sh.startTime,
+    endTime: sh.endTime,
+    fadeIn: sh.animationIn !== "none" ? sh.animationDuration : 0,
+    fadeOut: sh.animationOut !== "none" ? sh.animationDuration : 0,
   };
 }
 

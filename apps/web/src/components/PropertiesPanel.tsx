@@ -70,6 +70,7 @@ export default function PropertiesPanel() {
   const selectedCaption = s.captions.find((c) => c.id === s.selectedCaptionId);
   const selectedSticker = s.stickers.find((x) => x.id === s.selectedStickerId);
   const selectedImage = s.images.find((x) => x.id === s.selectedImageId);
+  const selectedShape = s.shapes.find((x) => x.id === s.selectedShapeId);
   const selectedAudio = s.audioClips.find((a) => a.id === s.selectedAudioId);
 
   // ── Video clip ────────────────────────────────────────────────────────────
@@ -127,6 +128,90 @@ export default function PropertiesPanel() {
               aria-label="속도 슬라이더"
             />
             <div className="prop-row"><span className="prop-label">속도</span><span className="prop-value">{selectedClip.speed.toFixed(2)}×</span></div>
+            <button type="button"
+              className={`tl-btn ${selectedClip.reverse ? "active" : ""}`}
+              style={{ width: "100%", marginTop: 6 }}
+              onClick={() => s.updateVideoClip(selectedClip.id, { reverse: !selectedClip.reverse })}
+              aria-pressed={selectedClip.reverse}
+              title="클립을 거꾸로 재생합니다 (내보낼 때 적용)"
+            >⏪ 역재생 {selectedClip.reverse ? "켜짐" : "꺼짐"}</button>
+          </PropsSection>
+
+          <PropsSection title="변형 (자르기 / 회전)" defaultOpen={false}>
+            <div className="prop-row">
+              <span className="prop-label">확대 {selectedClip.zoom.toFixed(2)}×</span>
+              <input type="range" className="prop-slider" min={1} max={3} step={0.05}
+                value={selectedClip.zoom}
+                onChange={(e) => s.updateVideoClip(selectedClip.id, { zoom: Number(e.target.value) })}
+                aria-label="클립 확대"
+              />
+            </div>
+            {selectedClip.zoom > 1 && (
+              <>
+                <div className="prop-row">
+                  <span className="prop-label">가로 위치 {selectedClip.offsetX}%</span>
+                  <input type="range" className="prop-slider" min={-50} max={50} step={1}
+                    value={selectedClip.offsetX}
+                    onChange={(e) => s.updateVideoClip(selectedClip.id, { offsetX: Number(e.target.value) })}
+                    aria-label="가로 위치"
+                  />
+                </div>
+                <div className="prop-row">
+                  <span className="prop-label">세로 위치 {selectedClip.offsetY}%</span>
+                  <input type="range" className="prop-slider" min={-50} max={50} step={1}
+                    value={selectedClip.offsetY}
+                    onChange={(e) => s.updateVideoClip(selectedClip.id, { offsetY: Number(e.target.value) })}
+                    aria-label="세로 위치"
+                  />
+                </div>
+              </>
+            )}
+            <div className="prop-row">
+              <span className="prop-label">회전 {selectedClip.rotate}°</span>
+              <input type="range" className="prop-slider" min={-180} max={180} step={1}
+                value={selectedClip.rotate}
+                onChange={(e) => s.updateVideoClip(selectedClip.id, { rotate: Number(e.target.value) })}
+                aria-label="클립 회전"
+              />
+            </div>
+            <div className="prop-row">
+              <button type="button" className={`tl-btn ${selectedClip.flipH ? "active" : ""}`}
+                onClick={() => s.updateVideoClip(selectedClip.id, { flipH: !selectedClip.flipH })}
+                aria-pressed={selectedClip.flipH} title="좌우 반전">⇄ 좌우반전</button>
+              <button type="button" className={`tl-btn ${selectedClip.flipV ? "active" : ""}`}
+                onClick={() => s.updateVideoClip(selectedClip.id, { flipV: !selectedClip.flipV })}
+                aria-pressed={selectedClip.flipV} title="상하 반전">⇅ 상하반전</button>
+            </div>
+          </PropsSection>
+
+          <PropsSection title="색 보정" defaultOpen={false}>
+            <div className="prop-row">
+              <span className="prop-label">밝기 {selectedClip.brightness}%</span>
+              <input type="range" className="prop-slider" min={0} max={200} step={1}
+                value={selectedClip.brightness}
+                onChange={(e) => s.updateVideoClip(selectedClip.id, { brightness: Number(e.target.value) })}
+                aria-label="밝기"
+              />
+            </div>
+            <div className="prop-row">
+              <span className="prop-label">대비 {selectedClip.contrast}%</span>
+              <input type="range" className="prop-slider" min={0} max={200} step={1}
+                value={selectedClip.contrast}
+                onChange={(e) => s.updateVideoClip(selectedClip.id, { contrast: Number(e.target.value) })}
+                aria-label="대비"
+              />
+            </div>
+            <div className="prop-row">
+              <span className="prop-label">채도 {selectedClip.saturation}%</span>
+              <input type="range" className="prop-slider" min={0} max={200} step={1}
+                value={selectedClip.saturation}
+                onChange={(e) => s.updateVideoClip(selectedClip.id, { saturation: Number(e.target.value) })}
+                aria-label="채도"
+              />
+            </div>
+            <button type="button" className="tl-btn" style={{ width: "100%", marginTop: 4 }}
+              onClick={() => s.updateVideoClip(selectedClip.id, { brightness: 100, contrast: 100, saturation: 100 })}
+            >색 보정 초기화</button>
           </PropsSection>
 
           <PropsSection title="볼륨 / 페이드">
@@ -529,6 +614,108 @@ export default function PropertiesPanel() {
           <div style={{ display: "flex", gap: 6 }}>
             <button type="button" className="btn-secondary-half" onClick={() => s.duplicateImage(selectedImage.id)}>복제</button>
             <button type="button" className="btn-danger-half" onClick={() => s.removeImage(selectedImage.id)}>삭제</button>
+          </div>
+        </div>
+      </aside>
+    );
+  }
+
+  // ── Shape ─────────────────────────────────────────────────────────────────
+  if (selectedShape) {
+    const sh = selectedShape;
+    const upd = (patch: Partial<typeof sh>) => s.updateShape(sh.id, patch);
+    const isLine = sh.kind === "line";
+    const kindLabel = sh.kind === "rect" ? "사각형" : sh.kind === "ellipse" ? "원/타원" : sh.kind === "triangle" ? "삼각형" : "선";
+    return (
+      <aside className="props-panel" aria-label="도형 속성">
+        <div className="props-header">도형 · {kindLabel}</div>
+        <div className="props-body">
+          <PropsSection title="색상">
+            {!isLine && (
+              <>
+                <div className="label-row" style={{ marginBottom: 4 }}><span>채우기</span></div>
+                <div className="color-swatch-row">
+                  {CAPTION_SWATCHES.map((sw) => (
+                    <button key={sw} type="button"
+                      className={`color-swatch ${sh.fillColor === sw ? "active" : ""}`}
+                      style={{ background: sw, outline: sw === "#FFFFFF" ? "1px solid #555" : undefined }}
+                      onClick={() => upd({ fillColor: sw })} aria-label={sw} />
+                  ))}
+                  <input type="color" className="prop-input" style={{ width: 30, height: 28, padding: 2 }}
+                    value={sh.fillColor.startsWith("#") ? sh.fillColor : "#3D8BFF"}
+                    onChange={(e) => upd({ fillColor: e.target.value })} aria-label="커스텀 채우기색" />
+                  <button type="button" className="tl-btn" onClick={() => upd({ fillColor: "transparent" })}
+                    aria-pressed={sh.fillColor === "transparent"}>투명</button>
+                </div>
+              </>
+            )}
+            <div className="label-row" style={{ marginTop: 8 }}><span>{isLine ? "선 색" : "외곽선"}</span></div>
+            <div className="prop-row">
+              <input type="color" style={{ width: 36, height: 28, padding: 0, border: "none", background: "transparent" }}
+                value={sh.strokeColor.startsWith("#") ? sh.strokeColor : "#FFFFFF"}
+                onChange={(e) => upd({ strokeColor: e.target.value })} aria-label="외곽선 색" />
+              <input type="range" className="prop-slider" min={0} max={30} step={1}
+                value={sh.strokeWidth} onChange={(e) => upd({ strokeWidth: Number(e.target.value) })}
+                aria-label="외곽선 굵기" />
+              <span className="prop-value">{sh.strokeWidth}px</span>
+            </div>
+          </PropsSection>
+
+          <PropsSection title="크기 / 회전 / 투명도">
+            <div className="prop-row">
+              <span className="prop-label">너비 {sh.width}%</span>
+              <input type="range" className="prop-slider" min={2} max={100} step={1}
+                value={sh.width} onChange={(e) => upd({ width: Number(e.target.value) })} aria-label="너비" />
+            </div>
+            {!isLine && (
+              <div className="prop-row">
+                <span className="prop-label">높이 {sh.height}%</span>
+                <input type="range" className="prop-slider" min={2} max={100} step={1}
+                  value={sh.height} onChange={(e) => upd({ height: Number(e.target.value) })} aria-label="높이" />
+              </div>
+            )}
+            <div className="prop-row">
+              <span className="prop-label">회전 {sh.rotation}°</span>
+              <input type="range" className="prop-slider" min={-180} max={180} step={1}
+                value={sh.rotation} onChange={(e) => upd({ rotation: Number(e.target.value) })} aria-label="회전" />
+            </div>
+            <div className="prop-row">
+              <span className="prop-label">투명도 {Math.round(sh.opacity * 100)}%</span>
+              <input type="range" className="prop-slider" min={0} max={1} step={0.05}
+                value={sh.opacity} onChange={(e) => upd({ opacity: Number(e.target.value) })} aria-label="투명도" />
+            </div>
+          </PropsSection>
+
+          <PropsSection title="타이밍 / 애니메이션" defaultOpen={false}>
+            <div className="prop-row">
+              <span className="prop-label">시작</span>
+              <input type="number" step={0.1} className="prop-input" style={{ width: 70 }}
+                value={sh.startTime.toFixed(1)}
+                onChange={(e) => upd({ startTime: Math.max(0, Math.min(sh.endTime - 0.1, Number(e.target.value))) })} />
+              <span className="prop-label">끝</span>
+              <input type="number" step={0.1} className="prop-input" style={{ width: 70 }}
+                value={sh.endTime.toFixed(1)}
+                onChange={(e) => upd({ endTime: Math.max(sh.startTime + 0.1, Number(e.target.value)) })} />
+            </div>
+            <div className="prop-row">
+              <span className="prop-label">등장</span>
+              <select className="prop-input" value={sh.animationIn} onChange={(e) => upd({ animationIn: e.target.value as typeof sh.animationIn })}>
+                <option value="none">없음</option><option value="fade">페이드</option>
+                <option value="slide-up">슬라이드 ↑</option><option value="slide-down">슬라이드 ↓</option>
+                <option value="zoom-in">줌 인</option><option value="pop">팝</option>
+              </select>
+            </div>
+            <div className="prop-row">
+              <span className="prop-label">퇴장</span>
+              <select className="prop-input" value={sh.animationOut} onChange={(e) => upd({ animationOut: e.target.value as typeof sh.animationOut })}>
+                <option value="none">없음</option><option value="fade">페이드</option><option value="zoom-out">줌 아웃</option>
+              </select>
+            </div>
+          </PropsSection>
+
+          <div style={{ display: "flex", gap: 6 }}>
+            <button type="button" className="btn-secondary-half" onClick={() => s.duplicateShape(sh.id)}>복제</button>
+            <button type="button" className="btn-danger-half" onClick={() => s.removeShape(sh.id)}>삭제</button>
           </div>
         </div>
       </aside>
