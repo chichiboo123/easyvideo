@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { useEditorStore } from "@/store/editorStore";
 import { TRANSITIONS, TRANSITION_GROUPS, transitionLabel, resolveTransition } from "@/lib/transitions";
 import Waveform from "./Waveform";
+import MIcon from "./MIcon";
 import type { TransitionType } from "@/types";
 
 function formatTime(sec: number) {
@@ -138,6 +139,27 @@ export default function ProTimeline() {
     seekToGlobal(applySnap(t));
   }
 
+  // Pointer-based scrubbing — works for mouse, touch and pen. Used by both the
+  // ruler and the playhead so the pink line can be dragged anywhere.
+  function startScrub(e: React.PointerEvent) {
+    if ((e.target as HTMLElement).closest(".track-header, .ruler-left-pad")) return;
+    e.preventDefault();
+    const seek = (clientX: number) => {
+      const t = clientXToTime(clientX);
+      if (t !== null) seekToGlobal(applySnap(t));
+    };
+    seek(e.clientX);
+    const onMove = (ev: PointerEvent) => { ev.preventDefault(); seek(ev.clientX); };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }
+
   function seekToGlobal(t: number) {
     if (isPlaying) setPlaying(false);
     let elapsed = 0;
@@ -154,7 +176,8 @@ export default function ProTimeline() {
     setCurrentTime(t);
   }
 
-  const playheadX = TRACK_HEADER_W + currentTime * pxPerSec;
+  // Clamp so the playhead never renders past the clips into empty space.
+  const playheadX = TRACK_HEADER_W + Math.max(0, Math.min(total, currentTime)) * pxPerSec;
 
   // Group audios by track
   const audiosByTrack: Record<number, typeof audioClips> = { 1: [], 2: [], 3: [] };
@@ -173,9 +196,7 @@ export default function ProTimeline() {
           aria-label="재생 위치에서 분할"
           title="현재 위치에서 분할 (S)"
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-            <path strokeLinecap="round" d="M6 9a3 3 0 100-6 3 3 0 000 6zm12 12a3 3 0 100-6 3 3 0 000 6zM5.5 8.5l13 7"/>
-          </svg>
+          <MIcon name="content_cut" size={15} />
           분할
         </button>
 
@@ -229,18 +250,14 @@ export default function ProTimeline() {
           aria-pressed={snapEnabled}
           title="스냅 (자석)"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M5 4v6a7 7 0 0 0 14 0V4"/><path d="M5 4h4M15 4h4"/><path d="M9 4v6M15 4v6"/>
-          </svg>
+          <MIcon name="push_pin" size={16} fill={snapEnabled} />
         </button>
 
         <div className="timeline-spacer" />
 
         {/* Zoom + time on the right */}
         <button type="button" className="tl-icon-btn" onClick={() => setTimelineZoom(pxPerSec - 20)} aria-label="축소" title="축소 (-)">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-            <circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5M8 11h6"/>
-          </svg>
+          <MIcon name="zoom_out" size={17} />
         </button>
         <input type="range" min={20} max={400} step={10}
           value={pxPerSec}
@@ -250,9 +267,7 @@ export default function ProTimeline() {
           title={`타임라인 ${Math.round(pxPerSec / 80 * 100)}%`}
         />
         <button type="button" className="tl-icon-btn" onClick={() => setTimelineZoom(pxPerSec + 20)} aria-label="확대" title="확대 (+)">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-            <circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5M11 8v6M8 11h6"/>
-          </svg>
+          <MIcon name="zoom_in" size={17} />
         </button>
 
         <span className="tl-divider" aria-hidden="true" />
@@ -266,7 +281,7 @@ export default function ProTimeline() {
         <div className="timeline-content" style={{ width: contentW }}>
 
           {/* Ruler */}
-          <div className="ruler" onClick={handleTrackClick}>
+          <div className="ruler" onClick={handleTrackClick} onPointerDown={startScrub}>
             <div className="ruler-left-pad" />
             <div className="ruler-marks" style={{ width: contentW - TRACK_HEADER_W }}>
               {rulerMarks.map((t) => (
@@ -289,33 +304,19 @@ export default function ProTimeline() {
             </div>
           </div>
 
-          {/* Playhead */}
+          {/* Playhead — draggable anywhere along the line (mouse + touch) */}
           <div className="playhead" style={{ left: playheadX }}
-            onMouseDown={(e) => {
-              const onMove = (ev: MouseEvent) => {
-                const t = clientXToTime(ev.clientX);
-                if (t !== null) seekToGlobal(applySnap(t));
-              };
-              const onUp = () => {
-                window.removeEventListener("mousemove", onMove);
-                window.removeEventListener("mouseup", onUp);
-              };
-              onMove(e.nativeEvent);
-              window.addEventListener("mousemove", onMove);
-              window.addEventListener("mouseup", onUp);
-            }}
+            onPointerDown={startScrub}
             aria-hidden="true"
           >
+            <div className="playhead-grab" />
             <div className="playhead-handle" />
           </div>
 
           {/* Video track V1 */}
           <div className="track-row" onClick={handleTrackClick} aria-label="비디오 트랙">
             <div className="track-header">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <rect x="2" y="3" width="20" height="14" rx="2"/>
-                <path d="M10 8l6 4-6 4V8z"/>
-              </svg>
+              <MIcon name="movie" size={15} />
               V1
             </div>
             <div className="track-body">
@@ -394,13 +395,9 @@ export default function ProTimeline() {
                       aria-label={`${clip.name} 다음 장면 전환 ${transitionLabel(resolved)} 변경`}
                     >
                       {isCut ? (
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-                          <path d="M12 5v14"/>
-                        </svg>
+                        <MIcon name="content_cut" size={11} />
                       ) : (
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-                          <path d="M7 7l-4 5 4 5M17 7l4 5-4 5"/>
-                        </svg>
+                        <MIcon name="sync_alt" size={12} />
                       )}
                     </button>
                     {openBoundary === idx && (
@@ -439,9 +436,7 @@ export default function ProTimeline() {
           {([1, 2, 3] as const).map((trackNum) => (
             <div key={`m${trackNum}`} className="track-row" onClick={handleTrackClick} aria-label={`오디오 트랙 M${trackNum}`}>
               <div className="track-header">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M12 3v10.55a4 4 0 10.97 2.6L13 6l6 1V4l-7-1z"/>
-                </svg>
+                <MIcon name="music_note" size={15} />
                 M{trackNum}
               </div>
               <div className="track-body">
@@ -491,9 +486,7 @@ export default function ProTimeline() {
           {captions.length > 0 && (
             <div className="track-row" onClick={handleTrackClick} aria-label="텍스트 트랙">
               <div className="track-header">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M5 4v3h5.5v12h3V7H19V4z"/>
-                </svg>
+                <MIcon name="title" size={15} />
                 텍스트
               </div>
               <div className="track-body">
@@ -571,7 +564,7 @@ export default function ProTimeline() {
           {/* Image overlay track */}
           {images.length > 0 && (
             <div className="track-row" onClick={handleTrackClick} aria-label="이미지 트랙">
-              <div className="track-header">이미지</div>
+              <div className="track-header"><MIcon name="image" size={15} />이미지</div>
               <div className="track-body">
                 {images.map((img) => {
                   const left = img.startTime * pxPerSec;
@@ -608,7 +601,7 @@ export default function ProTimeline() {
           {shapes.length > 0 && (
             <div className="track-row" onClick={handleTrackClick} aria-label="도형 트랙">
               <div className="track-header">
-                <span style={{ fontSize: 14 }} aria-hidden="true">▭</span>
+                <MIcon name="category" size={15} />
                 도형
               </div>
               <div className="track-body">
@@ -666,7 +659,7 @@ export default function ProTimeline() {
           {stickers.length > 0 && (
             <div className="track-row" onClick={handleTrackClick} aria-label="스티커 트랙">
               <div className="track-header">
-                <span style={{ fontSize: 16 }} aria-hidden="true">✦</span>
+                <MIcon name="star" size={15} fill />
                 스티커
               </div>
               <div className="track-body">

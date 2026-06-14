@@ -5,26 +5,27 @@ import { useEditorStore } from "@/store/editorStore";
 import { downloadProjectFile, loadProjectFile } from "@/lib/project";
 import { toast } from "@/lib/notifications";
 import DropdownMenu, { type DropdownItem } from "./DropdownMenu";
+import MIcon from "./MIcon";
 
 interface ToolbarProps {
   onExport: () => void;
   onShowShortcuts: () => void;
 }
 
-/* SVG icon helpers (inline so we don't add deps) */
+/* Google Material Symbols */
 const Icon = {
-  undo: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>,
-  redo: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 15-6.7L21 13"/></svg>,
-  select: <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M5 2l14 10-6 1-3 7z"/></svg>,
-  split: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M8 7l12 5M8 17L20 12"/></svg>,
-  trash: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>,
-  lock: <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 1 1 8 0v4"/></svg>,
-  unlock: <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>,
-  sound: <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3z"/><path d="M14 8a4.5 4.5 0 0 1 0 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
-  mute: <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3z"/><path d="M16 9l5 5m0-5l-5 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>,
-  help: <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7"/><circle cx="12" cy="17" r="0.8" fill="currentColor"/></svg>,
-  menu: <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>,
-  chevron: <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>,
+  undo: <MIcon name="undo" size={18} />,
+  redo: <MIcon name="redo" size={18} />,
+  select: <MIcon name="arrow_selector_tool" size={18} fill />,
+  split: <MIcon name="content_cut" size={18} />,
+  trash: <MIcon name="delete" size={18} />,
+  lock: <MIcon name="lock" size={17} fill />,
+  unlock: <MIcon name="lock_open" size={17} />,
+  sound: <MIcon name="volume_up" size={18} fill />,
+  mute: <MIcon name="volume_off" size={18} fill />,
+  help: <MIcon name="help" size={18} />,
+  menu: <MIcon name="menu" size={18} />,
+  chevron: <MIcon name="expand_more" size={14} />,
 };
 
 export default function Toolbar({ onExport, onShowShortcuts }: ToolbarProps) {
