@@ -38,6 +38,9 @@ interface EditorState {
   selectedShapeId: string | null;
   selectedAudioId: string | null;
 
+  // Audacity-style audio editor modal (audio clip id being edited, or null).
+  editingAudioId: string | null;
+
   // playback
   currentTime: number;
   isPlaying: boolean;
@@ -75,6 +78,7 @@ interface EditorState {
   setAudioClipLegacy: (clip: AudioClip | null) => void; // back-compat
   updateAudioClip: (id: string, patch: Partial<AudioClip>) => void;
   removeAudioClip: (id: string) => void;
+  setEditingAudioId: (id: string | null) => void;
 
   // captions
   addCaption: (caption?: Partial<Caption>) => void;
@@ -271,6 +275,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   selectedImageId: null,
   selectedShapeId: null,
   selectedAudioId: null,
+  editingAudioId: null,
 
   currentTime: 0,
   isPlaying: false,
@@ -439,7 +444,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       historyFuture: [],
       audioClips: state.audioClips.filter((a) => a.id !== id),
       selectedAudioId: state.selectedAudioId === id ? null : state.selectedAudioId,
+      editingAudioId: state.editingAudioId === id ? null : state.editingAudioId,
     })),
+
+  setEditingAudioId: (id) => set({ editingAudioId: id }),
 
   // ── captions ──────────────────────────────────────────────────────────────
 
@@ -791,8 +799,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       historyFuture: [],
       videoClips: Array.isArray(project.videoClips) ? project.videoClips.map(migrateVideoClip) : [],
       audioClips: Array.isArray(project.audioClips)
-        ? project.audioClips
-        : project.audioClip ? [project.audioClip] : [],
+        ? project.audioClips.map(migrateAudioClip)
+        : project.audioClip ? [migrateAudioClip(project.audioClip)] : [],
       captions: Array.isArray(project.captions) ? project.captions.map(migrateCaption) : [],
       stickers: Array.isArray(project.stickers) ? project.stickers.map(migrateSticker) : [],
       images: Array.isArray(project.images) ? project.images.map(migrateImage) : [],
@@ -855,6 +863,23 @@ function migrateVideoClip(v: any): VideoClip {
 }
 function migrateCaption(c: any): Caption {
   return defaultCaption(c);
+}
+function migrateAudioClip(a: any): AudioClip {
+  const duration = a.duration ?? 0;
+  return {
+    id: a.id ?? uid(),
+    name: a.name ?? "오디오",
+    url: a.url,
+    duration,
+    sourceDuration: a.sourceDuration ?? (duration + (a.trimStart ?? 0)),
+    trimStart: a.trimStart ?? 0,
+    isPreset: a.isPreset,
+    track: a.track ?? 1,
+    startTime: a.startTime ?? 0,
+    volume: a.volume ?? 1,
+    fadeIn: a.fadeIn ?? 0,
+    fadeOut: a.fadeOut ?? 0,
+  };
 }
 function migrateSticker(s: any): Sticker {
   return {

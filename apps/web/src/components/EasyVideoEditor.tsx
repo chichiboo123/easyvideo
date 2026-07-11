@@ -11,6 +11,7 @@ import PropertiesPanel from "./PropertiesPanel";
 import ProTimeline from "./ProTimeline";
 import ExportModal from "./ExportModal";
 import ShortcutsModal from "./ShortcutsModal";
+import AudioEditorModal from "./AudioEditorModal";
 import ToastContainer from "./ToastContainer";
 import Footer from "./Footer";
 
@@ -20,6 +21,8 @@ export default function EasyVideoEditor() {
 
   const isPlaying = useEditorStore((s) => s.isPlaying);
   const setPlaying = useEditorStore((s) => s.setPlaying);
+  const editingAudioId = useEditorStore((s) => s.editingAudioId);
+  const setEditingAudioId = useEditorStore((s) => s.setEditingAudioId);
   const splitClipAtPlayhead = useEditorStore((s) => s.splitClipAtPlayhead);
   const selectedClipId = useEditorStore((s) => s.selectedClipId);
   const selectedCaptionId = useEditorStore((s) => s.selectedCaptionId);
@@ -246,6 +249,9 @@ export default function EasyVideoEditor() {
 
       {showExport && <ExportModal onClose={() => setShowExport(false)} />}
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+      {editingAudioId && (
+        <AudioEditorModal audioId={editingAudioId} onClose={() => setEditingAudioId(null)} />
+      )}
       <ToastContainer />
     </>
   );

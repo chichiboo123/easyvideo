@@ -67,6 +67,7 @@ export default function ProTimeline() {
   const selectImage = useEditorStore((s) => s.selectImage);
   const selectShape = useEditorStore((s) => s.selectShape);
   const selectAudio = useEditorStore((s) => s.selectAudio);
+  const setEditingAudioId = useEditorStore((s) => s.setEditingAudioId);
   const updateCaption = useEditorStore((s) => s.updateCaption);
   const updateImage = useEditorStore((s) => s.updateImage);
   const updateShape = useEditorStore((s) => s.updateShape);
@@ -441,15 +442,19 @@ export default function ProTimeline() {
               </div>
               <div className="track-body">
                 {(audiosByTrack[trackNum] ?? []).map((a) => {
+                  const dur = a.duration || total || 10;
                   const left = (a.startTime ?? 0) * pxPerSec;
-                  const width = Math.max((a.duration || total || 10) * pxPerSec - 2, 40);
+                  const width = Math.max(dur * pxPerSec - 2, 40);
+                  const src = a.sourceDuration ?? dur;
+                  const trimStart = a.trimStart ?? 0;
                   return (
                     <div key={a.id}
                       className={`clip-block clip-audio ${selectedAudioId === a.id ? "selected" : ""}`}
                       style={{ left, width }}
                       onClick={(e) => { e.stopPropagation(); selectAudio(a.id); }}
+                      onDoubleClick={(e) => { e.stopPropagation(); setEditingAudioId(a.id); }}
                       onMouseDown={(e) => {
-                        // Drag horizontally to place the audio on the timeline.
+                        // Drag the body horizontally to place the audio on the timeline.
                         if ((e.target as HTMLElement).closest(".clip-edge-handle")) return;
                         const startX = e.clientX;
                         const orig = a.startTime ?? 0;
@@ -471,10 +476,58 @@ export default function ProTimeline() {
                       role="button"
                       tabIndex={0}
                       aria-label={`${a.name} 오디오`}
-                      title={`${a.name} — 드래그로 시작 위치 이동`}
+                      title={`${a.name} — 본체 드래그로 위치 이동, 양 끝 드래그로 앞뒤 자르기, 더블클릭으로 음원 편집`}
                     >
-                      {a.url && <Waveform url={a.url} width={width} height={32} />}
+                      {a.url && (
+                        <Waveform
+                          url={a.url}
+                          width={width}
+                          height={32}
+                          sourceDuration={src}
+                          trimStart={trimStart}
+                          clipDuration={dur}
+                        />
+                      )}
                       <span className="clip-label" style={{ position: "relative" }}>🎵 {a.name}</span>
+
+                      {/* Left handle — trim the front (keeps the tail anchored). */}
+                      <span className="clip-edge-handle left" onMouseDown={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        const startX = e.clientX;
+                        const origTrim = trimStart;
+                        const origStart = a.startTime ?? 0;
+                        const origDur = dur;
+                        const onMove = (ev: MouseEvent) => {
+                          const delta = (ev.clientX - startX) / pxPerSec;
+                          // Can't trim past the tail (min 0.2s), nor before the source start.
+                          const clamped = Math.max(-origTrim, Math.min(origDur - 0.2, delta));
+                          const newTrim = origTrim + clamped;
+                          updateAudioClip(a.id, {
+                            trimStart: newTrim,
+                            startTime: Math.max(0, origStart + clamped),
+                            duration: origDur - clamped,
+                          });
+                        };
+                        const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                        window.addEventListener("mousemove", onMove);
+                        window.addEventListener("mouseup", onUp);
+                      }} />
+
+                      {/* Right handle — trim the back (start stays put). */}
+                      <span className="clip-edge-handle right" onMouseDown={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        const startX = e.clientX;
+                        const origDur = dur;
+                        const maxDur = Math.max(0.2, src - trimStart);
+                        const onMove = (ev: MouseEvent) => {
+                          const delta = (ev.clientX - startX) / pxPerSec;
+                          const newDur = Math.max(0.2, Math.min(maxDur, origDur + delta));
+                          updateAudioClip(a.id, { duration: newDur });
+                        };
+                        const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                        window.addEventListener("mousemove", onMove);
+                        window.addEventListener("mouseup", onUp);
+                      }} />
                     </div>
                   );
                 })}

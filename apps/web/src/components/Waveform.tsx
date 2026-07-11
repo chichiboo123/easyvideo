@@ -8,18 +8,36 @@ interface WaveformProps {
   width: number;
   height: number;
   color?: string;
+  // Optional trim window: when the clip only plays part of the source, pass the
+  // full source length plus the visible slice so the drawn waveform matches the
+  // trimmed clip instead of stretching the whole file across the block.
+  sourceDuration?: number;
+  trimStart?: number;
+  clipDuration?: number;
 }
 
 // Lightweight canvas waveform for timeline audio clips. Peaks are decoded once
 // per URL (cached) and stretched to the current clip width.
-export default function Waveform({ url, width, height, color = "rgba(255,255,255,0.55)" }: WaveformProps) {
+export default function Waveform({
+  url, width, height, color = "rgba(255,255,255,0.55)",
+  sourceDuration, trimStart, clipDuration,
+}: WaveformProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const peaksRef = useRef<number[] | null>(null);
 
   function draw() {
     const canvas = canvasRef.current;
-    const peaks = peaksRef.current;
-    if (!canvas || !peaks || peaks.length === 0) return;
+    const all = peaksRef.current;
+    if (!canvas || !all || all.length === 0) return;
+
+    // Slice peaks to the trim window when we know the source length.
+    let peaks = all;
+    if (sourceDuration && sourceDuration > 0 && clipDuration && clipDuration > 0) {
+      const from = Math.floor(((trimStart ?? 0) / sourceDuration) * all.length);
+      const to = Math.ceil((((trimStart ?? 0) + clipDuration) / sourceDuration) * all.length);
+      peaks = all.slice(Math.max(0, from), Math.min(all.length, Math.max(from + 1, to)));
+    }
+
     const dpr = window.devicePixelRatio || 1;
     const w = Math.max(1, Math.floor(width));
     const h = Math.max(1, Math.floor(height));
@@ -50,7 +68,7 @@ export default function Waveform({ url, width, height, color = "rgba(255,255,255
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
 
-  useEffect(() => { draw(); /* redraw on resize */ }, [width, height]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { draw(); /* redraw on resize / trim change */ }, [width, height, sourceDuration, trimStart, clipDuration]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <canvas ref={canvasRef}

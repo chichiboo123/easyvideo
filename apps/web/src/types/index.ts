@@ -42,7 +42,9 @@ export interface AudioClip {
   id: string;
   name: string;
   url: string;
-  duration: number;
+  duration: number;        // current length shown on the timeline (= trimEnd - trimStart)
+  sourceDuration?: number; // full length of the underlying audio source (sec)
+  trimStart?: number;      // offset into the source where the clip begins (sec)
   isPreset?: boolean;
   track?: 1 | 2 | 3;       // M1=BGM, M2=SFX, M3=Voiceover
   startTime?: number;      // sec offset on timeline

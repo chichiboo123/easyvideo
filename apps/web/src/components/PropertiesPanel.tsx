@@ -732,6 +732,17 @@ export default function PropertiesPanel() {
           <PropsSection title="정보">
             <div className="prop-row"><span className="prop-label">이름</span><span className="prop-value">{a.name}</span></div>
             <div className="prop-row"><span className="prop-label">트랙</span><span className="prop-value">M{a.track ?? 1}</span></div>
+            <div className="prop-row"><span className="prop-label">길이</span><span className="prop-value">{formatDur(a.duration)}</span></div>
+            <button type="button" className="btn-primary" style={{ width: "100%", marginTop: 8 }}
+              onClick={() => s.setEditingAudioId(a.id)}
+              title="Audacity 형식의 파형 편집기 열기 (타임라인에서 더블클릭해도 열려요)"
+            >
+              🎧 음원 편집기 열기
+            </button>
+            <p style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5, marginTop: 6 }}>
+              타임라인 음원의 <strong>양 끝을 드래그</strong>하면 앞뒤를 자를 수 있고,
+              <strong> 더블클릭</strong>하면 파형 편집기가 열려요.
+            </p>
           </PropsSection>
           <PropsSection title="볼륨 / 페이드">
             <div className="prop-row"><span className="prop-label">볼륨</span><span className="prop-value">{Math.round((a.volume ?? 1) * 100)}%</span></div>
