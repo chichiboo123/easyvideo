@@ -26,6 +26,8 @@ const CREDITS: Credit[] = [
     desc: "트랙·트림·트랜지션 구조를 참고했어요" },
   { name: "FFmpeg.wasm", url: "https://github.com/ffmpegwasm/ffmpeg.wasm", license: "MIT",
     desc: "브라우저에서 영상을 합치고 내보내요" },
+  { name: "wavesurfer.js", url: "https://github.com/katspaugh/wavesurfer.js", license: "BSD-3",
+    desc: "Audacity 형식 음원 편집기의 파형·구간 선택" },
   { name: "Next.js", url: "https://github.com/vercel/next.js", license: "MIT",
     desc: "앱 프레임워크" },
   { name: "Zustand", url: "https://github.com/pmndrs/zustand", license: "MIT",

@@ -115,6 +115,7 @@ export default function MediaPanel() {
         id: `audio-${Date.now()}`,
         name: file.name.replace(/\.[^.]+$/, ""),
         url, duration: a.duration,
+        sourceDuration: a.duration, trimStart: 0,
         track, volume: 1, fadeIn: 0, fadeOut: 0, startTime: 0,
       });
       toast({ message: `오디오를 M${track} 트랙에 추가했어요`, type: "success" });
@@ -133,11 +134,13 @@ export default function MediaPanel() {
         const url = URL.createObjectURL(blob);
         const a = new Audio(url);
         a.onloadedmetadata = () => {
+          const dur = isFinite(a.duration) ? a.duration : 5;
           addAudioClip({
             id: `voiceover-${Date.now()}`,
             name: `보이스오버 ${new Date().toLocaleTimeString()}`,
             url,
-            duration: isFinite(a.duration) ? a.duration : 5,
+            duration: dur,
+            sourceDuration: dur, trimStart: 0,
             track: 3,
             volume: 1, fadeIn: 0, fadeOut: 0, startTime: 0,
           });

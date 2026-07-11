@@ -215,17 +215,19 @@ export default function ProPreviewPanel() {
       const el = audioRefs.current[a.id];
       if (!el) continue;
       const start = a.startTime ?? 0;
-      const local = currentTime - start;
+      const trimStart = a.trimStart ?? 0;
+      const local = currentTime - start;         // position within the trimmed clip
       const dur = a.duration || 0;
       const within = local >= 0 && (dur === 0 || local < dur);
+      const sourceTime = trimStart + local;      // position within the source file
 
       let gain = (a.volume ?? 1) * volume;
       if (a.fadeIn && local >= 0 && local < a.fadeIn) gain *= local / a.fadeIn;
       if (a.fadeOut && dur > 0 && local > dur - a.fadeOut) gain *= Math.max(0, (dur - local) / a.fadeOut);
       el.volume = Math.max(0, Math.min(1, isAudioMuted ? 0 : gain));
 
-      if (within && Math.abs(el.currentTime - local) > 0.35) {
-        try { el.currentTime = Math.max(0, local); } catch { /* not seekable yet */ }
+      if (within && Math.abs(el.currentTime - sourceTime) > 0.35) {
+        try { el.currentTime = Math.max(0, sourceTime); } catch { /* not seekable yet */ }
       }
       if (isPlaying && within) {
         if (el.paused) el.play().catch(() => {});
@@ -358,6 +360,23 @@ export default function ProPreviewPanel() {
     return t.join(" ") || "none";
   }, [activeClip]);
 
+  // Per-clip fade in/out, matched to what the export bakes with the `fade`
+  // filter. Ramps opacity 0→1 over the first `fadeIn` seconds of the active
+  // clip and 1→0 over its last `fadeOut` seconds.
+  const clipFadeOpacity = useMemo(() => {
+    if (!activeClip) return 1;
+    const localTime = currentTime - (clipOffsets[activeClipIndex] ?? 0);
+    const dur = activeClip.duration;
+    let op = 1;
+    if (activeClip.fadeIn > 0 && localTime < activeClip.fadeIn) {
+      op = Math.min(op, clamp01(localTime / activeClip.fadeIn));
+    }
+    if (activeClip.fadeOut > 0 && localTime > dur - activeClip.fadeOut) {
+      op = Math.min(op, clamp01((dur - localTime) / activeClip.fadeOut));
+    }
+    return op;
+  }, [activeClip, currentTime, clipOffsets, activeClipIndex]);
+
   // Letterbox/pillarbox fill behind the contained video.
   const frameBg = backgroundFill === "blur" || backgroundFill === "black"
     ? "#000"
@@ -384,7 +403,7 @@ export default function ProPreviewPanel() {
               key={activeClip.url}
               src={activeClip.url}
               className="preview-video"
-              style={{ filter: clipFilter, transform: clipTransform }}
+              style={{ filter: clipFilter, transform: clipTransform, opacity: clipFadeOpacity }}
               onTimeUpdate={handleTimeUpdate}
               onEnded={handleEnded}
               playsInline

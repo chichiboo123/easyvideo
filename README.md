@@ -63,14 +63,21 @@
 - **배경 채우기**: 여백(레터박스)을 **검정 · 블러 · 색상**으로 — 쇼츠 제작에 최적
 - 8종 비디오 효과(빈티지/화사/흑백/따뜻/차가움/블러/비네트) 실시간 CSS 프리뷰
 - 클립 **변형·색 보정** 실시간 반영 (확대·위치·회전·반전·밝기·대비·채도)
+- 클립 **페이드 인/아웃**을 미리보기에서 투명도로 실시간 표시 (내보내기 결과와 동일)
 - 자막/스티커/이미지/도형 **드래그 이동**, 전체화면 모드 (F)
 - 오디오가 타임라인과 **완전 동기화** — 시작 위치·페이드·스크럽 반영
 
 ### 🔊 오디오
 - BGM(M1)/효과음(M2) 파일 업로드 + 🎤 보이스오버 녹음(M3)
-- 타임라인 오디오 블록에 **파형(waveform) 표시**
+- 타임라인 오디오 블록에 **파형(waveform) 표시** — 잘라낸 구간만 그려짐
 - 타임라인에서 오디오 블록을 드래그해 **시작 위치 배치**
-- 트랙별 볼륨·페이드 인/아웃
+- **오디오 앞뒤 드래그 트림**: 오디오 블록의 양 끝을 잡아당겨 앞·뒤를 잘라내기
+- **🎧 Audacity 형식 음원 편집기** (오디오 더블클릭 또는 속성 패널 버튼):
+  파형에서 구간을 드래그 선택해 **선택만 남기기 / 선택 삭제 / 무음 / 페이드 인·아웃 /
+  볼륨 키우기·줄이기 / 정규화(노멀라이즈) / 거꾸로**, 여러 번 편집 후 실행취소·원본 복원,
+  적용 시 편집한 파형을 WAV로 인코딩해 타임라인에 반영
+  ([wavesurfer.js](https://github.com/katspaugh/wavesurfer.js) 기반, THANKS TO 🙏)
+- 트랙별 볼륨·페이드 인/아웃 (미리보기·내보내기 동일 적용)
 - 무료 음원 출처 안내(유튜브 오디오 라이브러리 · 공유마당 · Pixabay)
 
 ### 💾 프로젝트
@@ -181,6 +188,7 @@ npm run start      # 프로덕션 서버
 |---|---|---|
 | [OpenCut](https://github.com/OpenCut-app/OpenCut) | MIT | 트랙·트림·트랜지션 구조 참고 |
 | [FFmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm) | MIT | 브라우저 내 영상 처리 (xfade/overlay/amix) |
+| [wavesurfer.js](https://github.com/katspaugh/wavesurfer.js) | BSD-3 | Audacity 형식 음원 편집기의 파형 렌더링·구간 선택 |
 | [Next.js](https://github.com/vercel/next.js) | MIT | 앱 프레임워크 |
 | [Zustand](https://github.com/pmndrs/zustand) | MIT | 상태 관리 + Undo/Redo |
 | [Google Fonts](https://fonts.google.com/) | OFL/Apache | 자막용 102종 웹폰트 |

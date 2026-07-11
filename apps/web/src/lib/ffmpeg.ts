@@ -362,7 +362,15 @@ export async function exportVideo({
     const mixInputs: string[] = ["[0:a]"];
     for (let i = 0; i < usableAudios.length; i++) {
       const a = usableAudios[i];
-      const af: string[] = [`volume=${(a.volume ?? 1).toFixed(3)}`];
+      const af: string[] = [];
+      // Trim the source to the clip's [trimStart, trimStart+duration] window so
+      // front/back drag-trimming (and the audio editor) export correctly.
+      const trimStart = a.trimStart ?? 0;
+      const trimEnd = trimStart + a.duration;
+      if (trimStart > 0.001 || (a.sourceDuration && trimEnd < a.sourceDuration - 0.001)) {
+        af.push(`atrim=start=${trimStart.toFixed(3)}:end=${trimEnd.toFixed(3)}`, "asetpts=PTS-STARTPTS");
+      }
+      af.push(`volume=${(a.volume ?? 1).toFixed(3)}`);
       if (a.fadeIn) af.push(`afade=t=in:st=0:d=${a.fadeIn}`);
       if (a.fadeOut) af.push(`afade=t=out:st=${Math.max(0, a.duration - a.fadeOut).toFixed(3)}:d=${a.fadeOut}`);
       const delayMs = Math.round((a.startTime ?? 0) * 1000);

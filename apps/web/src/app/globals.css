@@ -1215,6 +1215,90 @@ button, select, input, textarea {
 .btn-primary:hover { opacity: 0.85; }
 .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* ── Audacity-style audio editor modal ──────────────────────────────── */
+.audio-editor-modal {
+  width: min(860px, 94vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  gap: 12px;
+}
+.audio-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.audio-editor-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+.audio-editor-wave-wrap {
+  position: relative;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  padding: 8px;
+  min-height: 156px;
+}
+.audio-editor-wave { width: 100%; }
+.audio-editor-loading,
+.audio-editor-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.audio-editor-error {
+  position: static;
+  padding: 24px;
+  color: #f87171;
+}
+.audio-editor-transport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.audio-editor-readout {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.audio-editor-tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+.audio-tool-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+.audio-tool-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-right: 2px;
+}
+.audio-editor-credit {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.audio-editor-credit a { color: var(--accent); text-decoration: none; }
+.audio-editor-credit a:hover { text-decoration: underline; }
+
 /* ── Scrollbars (webkit) ────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
