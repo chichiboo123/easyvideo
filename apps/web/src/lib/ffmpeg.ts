@@ -172,6 +172,28 @@ function buildClipAudioFilters(c: VideoClip, dur: number): string {
   return af.join(",");
 }
 
+// Does this media URL contain a decodable audio track? Screen recordings and
+// muted exports often have none, and the concat/amix graph assumes every clip
+// carries audio — so we probe up front and synthesise silence when it doesn't.
+// Errors (undecodable container, network) fall back to "no audio", which is the
+// safe branch: the clip still exports, just silent.
+async function clipHasAudio(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url);
+    const buf = await res.arrayBuffer();
+    const Ctx: typeof AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    const ctx = new Ctx();
+    try {
+      const decoded = await ctx.decodeAudioData(buf.slice(0));
+      return decoded.length > 0 && decoded.numberOfChannels > 0;
+    } finally {
+      ctx.close().catch(() => {});
+    }
+  } catch {
+    return false;
+  }
+}
+
 function videoEffectFilter(effect: VideoEffectType): string | null {
   switch (effect) {
     case "vintage":  return "eq=saturation=0.8:contrast=1.15:brightness=0.03,curves=vintage";
@@ -205,6 +227,29 @@ export async function exportVideo({
 
   const instance = await getFFmpeg(onProgress);
 
+  // Keep a rolling tail of FFmpeg's own log so a failed exec can report the real
+  // reason ("matches no streams", "Invalid argument", …) instead of a blank error.
+  const logTail: string[] = [];
+  const onLogLine = ({ message }: { message: string }) => {
+    logTail.push(message);
+    if (logTail.length > 80) logTail.shift();
+  };
+  instance.on("log", onLogLine);
+  const cleanup = () => { try { instance.off("log", onLogLine); } catch { /* noop */ } };
+
+  // Wrap exec so any non-zero exit surfaces the relevant FFmpeg log lines.
+  const exec = async (args: string[]) => {
+    try {
+      return await instance.exec(args);
+    } catch (e) {
+      const hint = logTail
+        .filter((l) => /error|invalid|no streams|not found|failed|unable|does not|conversion|permission/i.test(l))
+        .slice(-4).join(" · ");
+      cleanup();
+      throw new Error(hint ? `내보내기 처리 오류 — ${hint}` : (e instanceof Error && e.message ? e.message : "내보내기 처리에 실패했어요"));
+    }
+  };
+
   // ── 1. Write input files ─────────────────────────────────────────────────
   const inputNames: string[] = [];
   for (let i = 0; i < clips.length; i++) {
@@ -224,7 +269,14 @@ export async function exportVideo({
     outH = Math.round((probed?.h ?? 720) / 2) * 2;
   }
 
+  // Probe each clip for an audio track so silent sources get a synthesised
+  // silent track below — otherwise concat (-c copy) and the final [0:a] mix
+  // fail with "Stream specifier '0:a' matches no streams".
+  const audioPresence = await Promise.all(clips.map((c) => clipHasAudio(c.url)));
+
   // ── 2. Trim + transform + colour + fill each clip into trim_i.mp4 ────────
+  // Every clip is normalised to AAC 44.1 kHz stereo (real audio, or silence for
+  // sources without a track) so all trims share identical stream parameters.
   const trimmedNames: string[] = [];
   const trimmedDur: number[] = [];
   for (let i = 0; i < clips.length; i++) {
@@ -234,16 +286,28 @@ export async function exportVideo({
     trimmedDur.push(dur);
 
     const vGraph = buildClipVideoGraph(c, outW, outH, backgroundFill, dur);
-    const aFilters = buildClipAudioFilters(c, dur);
+    const hasAudio = audioPresence[i];
 
     const args: string[] = [
       "-ss", c.inPoint.toString(), "-to", c.outPoint.toString(), "-i", inputNames[i],
-      "-filter_complex", vGraph,
-      "-map", "[outv]", "-map", "0:a?",
     ];
-    if (aFilters) args.push("-af", aFilters);
-    args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", out);
-    await instance.exec(args);
+    if (!hasAudio) {
+      // Silent bed slightly longer than the video; -shortest trims it to match.
+      args.push("-f", "lavfi", "-t", (dur + 1).toFixed(3), "-i", "anullsrc=r=44100:cl=stereo");
+    }
+    args.push("-filter_complex", vGraph, "-map", "[outv]");
+    if (hasAudio) {
+      args.push("-map", "0:a?");
+      const aFilters = buildClipAudioFilters(c, dur);
+      if (aFilters) args.push("-af", aFilters);
+    } else {
+      args.push("-map", "1:a", "-shortest");
+    }
+    args.push(
+      "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+      "-c:a", "aac", "-ar", "44100", "-ac", "2", out,
+    );
+    await exec(args);
     trimmedNames.push(out);
   }
 
@@ -281,7 +345,7 @@ export async function exportVideo({
       prevA = outA;
     }
     const xfadeInputs = trimmedNames.flatMap((n) => ["-i", n]);
-    await instance.exec([
+    await exec([
       ...xfadeInputs,
       "-filter_complex", fc.join(";"),
       "-map", prevV, "-map", prevA,
@@ -291,7 +355,7 @@ export async function exportVideo({
   } else {
     const listBody = trimmedNames.map((n) => `file '${n}'`).join("\n");
     await instance.writeFile("list.txt", new TextEncoder().encode(listBody));
-    await instance.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "concat.mp4"]);
+    await exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "concat.mp4"]);
   }
 
   // ── 4. Render overlays (shapes / captions / stickers / images) to PNG ────
@@ -384,12 +448,15 @@ export async function exportVideo({
 
   if (fc.length > 0) args.push("-filter_complex", fc.join(";"));
   args.push("-map", vLabel === "[0:v]" ? "0:v" : vLabel);
-  args.push("-map", aLabel);
+  // "0:a" is made optional ("0:a?") so a stray missing track can never abort the
+  // final mux; the mixed "[aout]" label is always present and mapped directly.
+  args.push("-map", aLabel === "0:a" ? "0:a?" : aLabel);
   args.push("-shortest");
   args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "out.mp4");
 
-  await instance.exec(args);
+  await exec(args);
   const data = await instance.readFile("out.mp4");
+  cleanup();
   const buffer = data as Uint8Array;
   const copy = new Uint8Array(buffer.byteLength);
   copy.set(buffer);
