@@ -25,6 +25,10 @@
 
   --playhead: #fe2c55;
   --ruler-bg: #161616;
+  --bg-stage: #0a0a0a;     /* preview area surrounding the video frame */
+  --toast-bg: #1f2937;
+  --scrollbar-hover: #555;
+  --shadow-strong: rgba(0, 0, 0, 0.5);
 
   --radius-sm: 3px;
   --radius:    6px;
@@ -36,7 +40,53 @@
   --toolbar-h:    52px;
   --timeline-h:   260px;
   --footer-h:     28px;
+
+  color-scheme: dark;
 }
+
+/* ── Light theme ────────────────────────────────────────────────────────
+   Screenshot-friendly bright palette. Toggled via <html data-theme="light">.
+   Only the design tokens change — every component reads from these, so the
+   whole app (toolbar, panels, timeline, menus) flips together. */
+:root[data-theme="light"] {
+  --bg-app:      #eceef2;
+  --bg-panel:    #ffffff;
+  --bg-surface:  #f1f3f6;
+  --bg-elevated: #ffffff;
+  --bg-hover:    #e6e9ef;
+  --bg-active:   #dbdfe7;
+
+  --border:       #e3e6ec;
+  --border-light: #ccd1da;
+
+  --text-primary:   #1b1d22;
+  --text-secondary: #565b66;
+  --text-muted:     #8b91a0;
+
+  --accent-soft: rgba(254, 44, 85, 0.12);
+  --accent-glow: 0 0 12px rgba(254, 44, 85, 0.22);
+
+  --ruler-bg: #eef0f4;
+  --bg-stage: #d9dce3;   /* light neutral so the black video frame stands out */
+  --toast-bg: #ffffff;
+  --scrollbar-hover: #aab0bc;
+  --shadow-strong: rgba(30, 40, 60, 0.18);
+
+  color-scheme: light;
+}
+
+/* A few components hardcode dark-only values; nudge them for light mode. */
+:root[data-theme="light"] .color-swatch.active { border-color: var(--text-primary); }
+:root[data-theme="light"] .btn-danger,
+:root[data-theme="light"] .btn-danger-half {
+  border-color: #f2b5b5;
+  background: #fdecec;
+  color: #c0341d;
+}
+:root[data-theme="light"] .btn-danger:hover,
+:root[data-theme="light"] .btn-danger-half:hover { background: #fbdcdc; }
+:root[data-theme="light"] .dropdown-menu { box-shadow: 0 12px 32px var(--shadow-strong); }
+:root[data-theme="light"] .toast { box-shadow: 0 6px 20px var(--shadow-strong); }
 
 /* ── Reset & base ───────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -50,6 +100,12 @@ html, body {
   font-size: 13px;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+}
+
+/* Smooth the light ⇆ dark switch on the big structural surfaces. */
+.toolbar, .media-panel, .props-panel, .timeline, .preview-panel,
+.app-footer, .track-header, .ruler, .ruler-left-pad {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 button, select, input, textarea {
@@ -557,7 +613,7 @@ button, select, input, textarea {
 /* ── Preview panel (center) ─────────────────────────────────────────── */
 .preview-panel {
   grid-area: preview;
-  background: #0a0a0a;
+  background: var(--bg-stage);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1303,7 +1359,7 @@ button, select, input, textarea {
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #555; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
 
 /* ── Misc helpers ───────────────────────────────────────────────────── */
 .visually-hidden {
@@ -1475,7 +1531,7 @@ button, select, input, textarea {
   min-width: 280px;
   max-width: 480px;
   padding: 10px 14px;
-  background: #1f2937;
+  background: var(--toast-bg);
   border: 1px solid var(--border-light);
   border-radius: var(--radius);
   color: var(--text-primary);

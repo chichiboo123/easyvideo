@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { useEditorStore } from "@/store/editorStore";
 import { downloadProjectFile, loadProjectFile } from "@/lib/project";
 import { toast } from "@/lib/notifications";
+import { useTheme } from "@/lib/theme";
 import DropdownMenu, { type DropdownItem } from "./DropdownMenu";
 import MIcon from "./MIcon";
 
@@ -26,6 +27,8 @@ const Icon = {
   help: <MIcon name="help" size={18} />,
   menu: <MIcon name="menu" size={18} />,
   chevron: <MIcon name="expand_more" size={14} />,
+  lightMode: <MIcon name="light_mode" size={18} fill />,
+  darkMode: <MIcon name="dark_mode" size={18} fill />,
 };
 
 export default function Toolbar({ onExport, onShowShortcuts }: ToolbarProps) {
@@ -55,6 +58,8 @@ export default function Toolbar({ onExport, onShowShortcuts }: ToolbarProps) {
   const setBackgroundFill = useEditorStore((s) => s.setBackgroundFill);
   const resetProject = useEditorStore((s) => s.resetProject);
   const hydrateFromJSON = useEditorStore((s) => s.hydrateFromJSON);
+
+  const { theme, toggleTheme } = useTheme();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -225,6 +230,13 @@ export default function Toolbar({ onExport, onShowShortcuts }: ToolbarProps) {
       </div>
 
       <div className="toolbar-spacer" />
+
+      <button type="button" className="tb-icon-btn"
+        onClick={toggleTheme}
+        title={theme === "dark" ? "라이트 모드로 전환 (밝게)" : "다크 모드로 전환 (어둡게)"}
+        aria-label={theme === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환"}
+        aria-pressed={theme === "light"}
+      >{theme === "dark" ? Icon.lightMode : Icon.darkMode}</button>
 
       <button type="button" className="tb-icon-btn"
         onClick={onShowShortcuts}
